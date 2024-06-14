@@ -60,15 +60,7 @@ import wx.grid
 
 logger = logging.getLogger(__name__)
 
-
-# Active means that something is happening that should prevent the user from interacting with the UI
-ACTIVE_PHASE_IDLE: Final[int] = 0
-ACTIVE_PHASE_STARTING_CAPTURE: Final[int] = 1
-ACTIVE_PHASE_STARTING_GET_RESOLUTIONS: Final[int] = 2
-ACTIVE_PHASE_STARTING_LIST_INTRINSICS: Final[int] = 3  # This and next phase to be combined with modified API
-ACTIVE_PHASE_STARTING_GET_INTRINSICS: Final[int] = 4
-ACTIVE_PHASE_STARTING_FINAL: Final[int] = 5
-ACTIVE_PHASE_STOPPING: Final[int] = 6
+from src.connector.connector import ACTIVE_PHASE_IDLE, ACTIVE_PHASE_STARTING_CAPTURE, ACTIVE_PHASE_STARTING_FINAL, ACTIVE_PHASE_STARTING_GET_INTRINSICS, ACTIVE_PHASE_STARTING_GET_RESOLUTIONS, ACTIVE_PHASE_STARTING_LIST_INTRINSICS, ACTIVE_PHASE_STOPPING
 
 POSE_REPRESENTATIVE_MODEL: Final[str] = "coordinate_axes"
 
@@ -104,7 +96,6 @@ class PoseSolverPanel(BasePanel):
     _tracking_start_button: wx.Button
     _tracking_stop_button: wx.Button
     _tracking_table: TrackingTable
-    _renderer: GraphicsRenderer | None
 
     _is_solving: bool
     _is_updating: bool
