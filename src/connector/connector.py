@@ -1,23 +1,3 @@
-from src.calibrator.api.get_calibration_result_request import GetCalibrationResultRequest
-from src.calibrator.api.list_calibration_detector_resolutions_request import ListCalibrationDetectorResolutionsRequest
-from src.calibrator.api.list_calibration_result_metadata_request import ListCalibrationResultMetadataRequest
-from src.common.status_message_source import StatusMessageSource
-from src.common.structures.detector_resolution import DetectorResolution
-from src.common.structures.image_resolution import ImageResolution
-from src.common.structures.intrinsic_parameters import IntrinsicParameters
-from src.common.structures.marker_snapshot import MarkerSnapshot
-from src.common.structures.pose import Pose
-from src.detector.api.get_capture_properties_request import GetCapturePropertiesRequest
-from src.detector.api.get_marker_snapshots_request import GetMarkerSnapshotsRequest
-from src.detector.api.start_capture_request import StartCaptureRequest
-from src.detector.api.stop_capture_request import StopCaptureRequest
-from src.pose_solver.api.add_marker_corners_request import AddMarkerCornersRequest
-from src.pose_solver.api.add_target_marker_request import AddTargetMarkerRequest
-from src.pose_solver.api.get_poses_request import GetPosesRequest
-from src.pose_solver.api.set_intrinsic_parameters_request import SetIntrinsicParametersRequest
-from src.pose_solver.api.set_reference_marker_request import SetReferenceMarkerRequest
-from src.pose_solver.api.start_pose_solver_request import StartPoseSolverRequest
-from src.pose_solver.api.stop_pose_solver_request import StopPoseSolverRequest
 from .exceptions import ResponseSeriesNotExpected
 from src.common import \
     DequeueStatusMessagesRequest, \
@@ -29,14 +9,18 @@ from src.common import \
     MCastRequestSeries, \
     MCastResponse, \
     MCastResponseSeries, \
-    mcast_websocket_send_recv
+    mcast_websocket_send_recv, \
+    StatusMessageSource
 from src.common.structures import \
     COMPONENT_ROLE_LABEL_DETECTOR, \
     COMPONENT_ROLE_LABEL_POSE_SOLVER, \
-    ComponentConnectionStatic
+    ComponentConnectionStatic, \
+    DetectorResolution, \
+    ImageResolution, \
+    IntrinsicParameters, \
+    MarkerSnapshot
 from src.connector.structures import \
     BaseComponentConnectionDynamic, \
-    CalibratorComponentConnectionDynamic, \
     ConnectionTableRow, \
     DetectorComponentConnectionDynamic, \
     PoseSolverComponentConnectionDynamic
@@ -44,16 +28,23 @@ from src.calibrator.api import \
     AddCalibrationImageResponse, \
     CalibrateResponse, \
     GetCalibrationImageResponse, \
+    GetCalibrationResultRequest, \
     GetCalibrationResultResponse, \
+    ListCalibrationDetectorResolutionsRequest, \
     ListCalibrationDetectorResolutionsResponse, \
+    ListCalibrationResultMetadataRequest, \
     ListCalibrationImageMetadataResponse, \
     ListCalibrationResultMetadataResponse
 from src.detector.api import \
     GetCaptureDeviceResponse, \
+    GetCapturePropertiesRequest, \
     GetCapturePropertiesResponse, \
     GetCaptureImageResponse, \
     GetDetectionParametersResponse, \
-    GetMarkerSnapshotsResponse
+    GetMarkerSnapshotsRequest, \
+    GetMarkerSnapshotsResponse, \
+    StartCaptureRequest, \
+    StopCaptureRequest
 from src.pose_solver.api import \
     AddTargetMarkerResponse, \
     GetPosesResponse
@@ -66,15 +57,19 @@ from websockets import \
 
 logger = logging.getLogger(__name__)
 
-# from src.gui.panels.pose_solver_panel import ACTIVE_PHASE_IDLE, ACTIVE_PHASE_STARTING_CAPTURE, ACTIVE_PHASE_STARTING_FINAL, ACTIVE_PHASE_STARTING_GET_INTRINSICS, ACTIVE_PHASE_STARTING_GET_RESOLUTIONS, ACTIVE_PHASE_STARTING_LIST_INTRINSICS, ACTIVE_PHASE_STOPPING
-# Active means that something is happening that should prevent the user from interacting with the UI
+
+MODE_DETECTING_ONLY: Final[int] = 0
+MODE_SOLVING: Final[int] = 1
+
 ACTIVE_PHASE_IDLE: Final[int] = 0
 ACTIVE_PHASE_STARTING_CAPTURE: Final[int] = 1
 ACTIVE_PHASE_STARTING_GET_RESOLUTIONS: Final[int] = 2
 ACTIVE_PHASE_STARTING_LIST_INTRINSICS: Final[int] = 3  # This and next phase to be combined with modified API
 ACTIVE_PHASE_STARTING_GET_INTRINSICS: Final[int] = 4
 ACTIVE_PHASE_STARTING_FINAL: Final[int] = 5
+
 ACTIVE_PHASE_STOPPING: Final[int] = 6
+
 
 SUPPORTED_RESPONSE_TYPES: list[type[MCastResponse]] = [
     AddCalibrationImageResponse,
@@ -95,10 +90,8 @@ SUPPORTED_RESPONSE_TYPES: list[type[MCastResponse]] = [
     ListCalibrationImageMetadataResponse,
     ListCalibrationResultMetadataResponse]
 
-class Connector(MCastComponent):
 
-    active_request_ids: list[uuid.UUID]
-    status_message_source: StatusMessageSource
+class Connector(MCastComponent):
 
     class Connection:
         def __init__(
@@ -112,37 +105,42 @@ class Connector(MCastComponent):
         static: ComponentConnectionStatic
         dynamic: BaseComponentConnectionDynamic
 
-    class PassiveDetectorRequest:
+    class LiveDetector:
         request_id: uuid.UUID | None
+
+        calibration_result_identifier: str | None
+        calibrated_resolutions: list[DetectorResolution] | None
+        current_resolution: ImageResolution | None
+        current_intrinsic_parameters: IntrinsicParameters | None
+
         detected_marker_snapshots: list[MarkerSnapshot]
         rejected_marker_snapshots: list[MarkerSnapshot]
         marker_snapshot_timestamp: datetime.datetime
+
         def __init__(self):
             self.request_id = None
+            self.calibration_result_identifier = None
+            self.calibrated_resolutions = None
+            self.current_resolution = None
+            self.current_intrinsic_parameters = None
             self.detected_marker_snapshots = list()
             self.rejected_marker_snapshots = list()
             self.marker_snapshot_timestamp = datetime.datetime.min
-    _passive_detecting_requests: dict[str, PassiveDetectorRequest]  # access by detector_label
-    _passive_solving_request_id: uuid.UUID | None
 
+    _status_message_source: StatusMessageSource
     _serial_identifier: str
     _connections: dict[str, Connection]
-    current_phase: int
-    selected_pose_solver_label: str
+
+    _pending_request_ids: list[uuid.UUID]
+    _live_detectors: dict[str, LiveDetector]  # access by detector_label
+
+    _startup_phase: int
+    _running: bool
 
     _request_series_by_label: dict[str, list[Tuple[MCastRequestSeries, uuid.UUID]]]
 
     # None indicates that no response has been received yet.
     _response_series_by_id: dict[uuid.UUID, MCastResponseSeries | None]
-
-    # Variables assigned upon starting the pose solver
-    _detector_calibration_labels: dict[str, str]
-    _detector_resolutions: dict[str, ImageResolution]
-    _calibrated_resolutions: list[DetectorResolution]
-    _detector_intrinsics: dict[str, IntrinsicParameters]
-
-    is_solving: bool
-    tracked_target_poses: list[Pose]
 
     def __init__(
         self,
@@ -152,28 +150,19 @@ class Connector(MCastComponent):
         super().__init__(
             status_source_label=serial_identifier,
             send_status_messages_to_logger=send_status_messages_to_logger)
-        
-        self._passive_solving_request_id = None
-        
+
         self.status_message_source = StatusMessageSource(
             source_label="connector",
             send_to_logger=True)
-        self.active_request_ids = list()
-        self._passive_detecting_requests = dict()
 
-        self.is_solving = False
-        self.tracked_target_poses = list()
+        self._startup_phase = ACTIVE_PHASE_IDLE
+        self._pending_request_ids = list()
+        self._live_detectors = dict()
 
         self._serial_identifier = serial_identifier
         self._connections = dict()
         self._request_series_by_label = dict()
         self._response_series_by_id = dict()
-        self.current_phase = ACTIVE_PHASE_IDLE
-
-        self._detector_resolutions = dict()
-        self._calibrated_resolutions = list()
-        self._detector_calibration_labels = dict()
-        self._detector_intrinsics = dict()
 
     def add_connection(
         self,
@@ -254,7 +243,7 @@ class Connector(MCastComponent):
         response: GetCapturePropertiesResponse,
         detector_label: str
     ) -> None:
-        self._detector_resolutions[detector_label] = ImageResolution(
+        self._live_detectors[detector_label].current_resolution = ImageResolution(
             x_px=response.resolution_x_px,
             y_px=response.resolution_y_px)
         
@@ -262,7 +251,8 @@ class Connector(MCastComponent):
         self,
         response: GetCalibrationResultResponse
     ) -> None:
-        self._detector_intrinsics[response.intrinsic_calibration.detector_serial_identifier] = \
+        detector_label: str = response.intrinsic_calibration.detector_serial_identifier
+        self._live_detectors[detector_label].current_intrinsic_parameters = \
             response.intrinsic_calibration.calibrated_values
 
     def handle_response_get_marker_snapshots(
@@ -270,31 +260,20 @@ class Connector(MCastComponent):
         response: GetMarkerSnapshotsResponse,
         detector_label: str
     ):
-        if detector_label in self._passive_detecting_requests.keys():
-            self._passive_detecting_requests[detector_label].detected_marker_snapshots = \
+        if detector_label in self._live_detectors.keys():
+            self._live_detectors[detector_label].detected_marker_snapshots = \
                 response.detected_marker_snapshots
-            self._passive_detecting_requests[detector_label].rejected_marker_snapshots = \
+            self._live_detectors[detector_label].rejected_marker_snapshots = \
                 response.rejected_marker_snapshots
-            self._passive_detecting_requests[detector_label].marker_snapshot_timestamp = \
+            self._live_detectors[detector_label].marker_snapshot_timestamp = \
                 datetime.datetime.utcnow()  # TODO: This should come from the detector
-
-    def handle_response_get_poses(
-        self,
-        response: GetPosesResponse
-    ) -> None:
-        if not self.is_solving:
-            return False
-        self.tracked_target_poses.clear()
-        for pose in response.target_poses:
-            self.tracked_target_poses.append(pose)
-        for pose in response.detector_poses:
-            self.tracked_target_poses.append(pose)
 
     def handle_response_list_calibration_detector_resolutions(
         self,
-        response: ListCalibrationDetectorResolutionsResponse
+        response: ListCalibrationDetectorResolutionsResponse,
+        detector_label: str
     ) -> None:
-        self._calibrated_resolutions = response.detector_resolutions
+        self._live_detectors[detector_label].calibrated_resolutions = response.detector_resolutions
 
     def handle_response_list_calibration_result_metadata(
         self,
@@ -312,7 +291,15 @@ class Connector(MCastComponent):
             timestamp: datetime.datetime = datetime.datetime.fromisoformat(result_metadata.timestamp_utc)
             if timestamp > newest_timestamp:
                 newest_result_id = result_metadata.identifier
-        self._detector_calibration_labels[detector_label] = newest_result_id
+        self._live_detectors[detector_label].calibration_result_identifier = newest_result_id
+
+    def handle_response_unknown(
+        self,
+        response: MCastResponse
+    ):
+        self.status_message_source.enqueue_status_message(
+            severity="error",
+            message=f"Received unexpected response: {str(type(response))}")
 
     def handle_response_series(
         self,
@@ -337,7 +324,6 @@ class Connector(MCastComponent):
                     message=f"Received a response series{task_text}, "
                             f"but it contained more responses ({response_count}) "
                             f"than expected ({expected_response_count}).")
-        #return True
 
         success: bool = True
         response: MCastResponse
@@ -356,11 +342,10 @@ class Connector(MCastComponent):
                 self.handle_response_get_marker_snapshots(
                     response=response,
                     detector_label=response_series.responder)
-            elif isinstance(response, GetPosesResponse):
-                self.handle_response_get_poses(response=response)
-                success = True
             elif isinstance(response, ListCalibrationDetectorResolutionsResponse):
-                self.handle_response_list_calibration_detector_resolutions(response=response)
+                self.handle_response_list_calibration_detector_resolutions(
+                    response=response,
+                    detector_label=response_series.responder)
                 success = True
             elif isinstance(response, ListCalibrationResultMetadataResponse):
                 self.handle_response_list_calibration_result_metadata(
@@ -371,7 +356,7 @@ class Connector(MCastComponent):
                 self.handle_error_response(response=response)
                 success = False
             elif not isinstance(response, EmptyResponse):
-                self.handle_unknown_response(response=response)
+                self.handle_response_unknown(response=response)
                 success = False
         return success
 
@@ -390,88 +375,94 @@ class Connector(MCastComponent):
         if request_id in self._response_series_by_id:
             del self._response_series_by_id[request_id]
 
+    def is_running(self):
+        return self._running
+
     def on_active_request_ids_processed(self) -> None:
-        if self.current_phase == ACTIVE_PHASE_STARTING_CAPTURE:
+        if self._startup_phase == ACTIVE_PHASE_STARTING_CAPTURE:
             self.status_message_source.enqueue_status_message(
                 severity="debug",
                 message="ACTIVE_PHASE_STARTING_CAPTURE complete")
             calibrator_labels: list[str] = self.get_connected_detector_labels()
             request_series: MCastRequestSeries = MCastRequestSeries(
                 series=[ListCalibrationDetectorResolutionsRequest()])
-            self.active_request_ids.append(self.request_series_push(
+            self._pending_request_ids.append(self.request_series_push(
                 connection_label=calibrator_labels[0],
                 request_series=request_series))
             detector_labels: list[str] = self.get_connected_detector_labels()
             for detector_label in detector_labels:
                 request_series: MCastRequestSeries = MCastRequestSeries(
                     series=[GetCapturePropertiesRequest()])
-                self.active_request_ids.append(self.request_series_push(
+                self._pending_request_ids.append(self.request_series_push(
                     connection_label=detector_label,
                     request_series=request_series))
-            self.current_phase = ACTIVE_PHASE_STARTING_GET_RESOLUTIONS
-        elif self.current_phase == ACTIVE_PHASE_STARTING_GET_RESOLUTIONS:
+            self._startup_phase = ACTIVE_PHASE_STARTING_GET_RESOLUTIONS
+        elif self._startup_phase == ACTIVE_PHASE_STARTING_GET_RESOLUTIONS:
             self.status_message_source.enqueue_status_message(
                 severity="debug",
                 message="ACTIVE_PHASE_STARTING_GET_RESOLUTIONS complete")
             requests: list[MCastRequest] = list()
-            for detector_label, image_resolution in self._detector_resolutions.items():
-                detector_resolution: DetectorResolution = DetectorResolution(
-                    detector_serial_identifier=detector_label,
-                    image_resolution=image_resolution)
-                if detector_resolution in self._calibrated_resolutions:
-                    requests.append(
-                        ListCalibrationResultMetadataRequest(
-                            detector_serial_identifier=detector_resolution.detector_serial_identifier,
-                            image_resolution=image_resolution))
-                else:
-                    self.status_message_source.enqueue_status_message(
-                        severity="error",
-                        message=f"No calibration available for detector {detector_label} "
-                                f"at resolution {str(image_resolution)}. No intrinsics will be set.")
+            for detector_label in self._live_detectors.keys():
+                live_detector: Connector.LiveDetector = self._live_detectors[detector_label]
+                for image_resolution in live_detector.calibrated_resolutions:
+                    detector_resolution: DetectorResolution = DetectorResolution(
+                        detector_serial_identifier=detector_label,
+                        image_resolution=image_resolution)
+                    if detector_resolution in live_detector.calibrated_resolutions:
+                        requests.append(
+                            ListCalibrationResultMetadataRequest(
+                                detector_serial_identifier=detector_resolution.detector_serial_identifier,
+                                image_resolution=image_resolution))
+                    else:
+                        self.status_message_source.enqueue_status_message(
+                            severity="error",
+                            message=f"No calibration available for detector {detector_label} "
+                                    f"at resolution {str(image_resolution)}. No intrinsics will be set.")
             calibrator_labels: list[str] = self.get_connected_detector_labels()
             request_series: MCastRequestSeries = MCastRequestSeries(series=requests)
-            self.active_request_ids.append(self.request_series_push(
+            self._pending_request_ids.append(self.request_series_push(
                 connection_label=calibrator_labels[0],
                 request_series=request_series))
-            self.current_phase = ACTIVE_PHASE_STARTING_LIST_INTRINSICS
-        elif self.current_phase == ACTIVE_PHASE_STARTING_LIST_INTRINSICS:
+            self._startup_phase = ACTIVE_PHASE_STARTING_LIST_INTRINSICS
+        elif self._startup_phase == ACTIVE_PHASE_STARTING_LIST_INTRINSICS:
             self.status_message_source.enqueue_status_message(
                 severity="debug",
                 message="ACTIVE_PHASE_STARTING_LIST_INTRINSICS complete")
             requests: list[MCastRequest] = list()
-            for detector_label, result_identifier in self._detector_calibration_labels.items():
-                requests.append(GetCalibrationResultRequest(result_identifier=result_identifier))
+            for detector_label in self._live_detectors.keys():
+                live_detector: Connector.LiveDetector = self._live_detectors[detector_label]
+                requests.append(GetCalibrationResultRequest(
+                    result_identifier=live_detector.calibration_result_identifier))
             calibrator_labels: list[str] = self.get_connected_detector_labels()
             request_series: MCastRequestSeries = MCastRequestSeries(series=requests)
-            self.active_request_ids.append(self.request_series_push(
+            self._pending_request_ids.append(self.request_series_push(
                 connection_label=calibrator_labels[0],
                 request_series=request_series))
-            self.current_phase = ACTIVE_PHASE_STARTING_GET_INTRINSICS
-        elif self.current_phase == ACTIVE_PHASE_STARTING_GET_INTRINSICS:
-            self.status_message_source.enqueue_status_message(
-                severity="debug",
-                message="ACTIVE_PHASE_STARTING_GET_INTRINSICS complete")
-            requests: list[MCastRequest] = list()
-            for detector_label, intrinsic_parameters in self._detector_intrinsics.items():
-                requests.append(SetIntrinsicParametersRequest(
-                    detector_label=detector_label,
-                    intrinsic_parameters=intrinsic_parameters))
-            requests.append(StartPoseSolverRequest())
-            request_series: MCastRequestSeries = MCastRequestSeries(series=requests)
-            self.active_request_ids.append(self.request_series_push(
-                connection_label=self.selected_pose_solver_label,
-                request_series=request_series))
-            self.current_phase = ACTIVE_PHASE_STARTING_FINAL
-        elif self.current_phase == ACTIVE_PHASE_STARTING_FINAL:
+        #     self.startup_phase = ACTIVE_PHASE_STARTING_GET_INTRINSICS
+        # elif self.startup_phase == ACTIVE_PHASE_STARTING_GET_INTRINSICS:
+        #     self.status_message_source.enqueue_status_message(
+        #         severity="debug",
+        #         message="ACTIVE_PHASE_STARTING_GET_INTRINSICS complete")
+        #     requests: list[MCastRequest] = list()
+        #     for detector_label, intrinsic_parameters in self._detector_intrinsics.items():
+        #         requests.append(SetIntrinsicParametersRequest(
+        #             detector_label=detector_label,
+        #             intrinsic_parameters=intrinsic_parameters))
+        #     requests.append(StartPoseSolverRequest())
+        #     request_series: MCastRequestSeries = MCastRequestSeries(series=requests)
+        #     self.active_request_ids.append(self.request_series_push(
+        #         connection_label=self.selected_pose_solver_label,
+        #         request_series=request_series))
+            self._startup_phase = ACTIVE_PHASE_STARTING_FINAL
+        elif self._startup_phase == ACTIVE_PHASE_STARTING_FINAL:
             self.status_message_source.enqueue_status_message(
                 severity="debug",
                 message="ACTIVE_PHASE_STARTING_FINAL complete")
-            for detector_label in self._detector_intrinsics.keys():
-                self._passive_detecting_requests[detector_label] = self.PassiveDetectorRequest()
-            self.is_solving = True
-            self.current_phase = ACTIVE_PHASE_IDLE
-        elif self.current_phase == ACTIVE_PHASE_STOPPING:
-            self.current_phase = ACTIVE_PHASE_IDLE
+            for detector_label in self._live_detectors.keys():
+                self._live_detectors[detector_label] = self.LiveDetector()
+            self._startup_phase = ACTIVE_PHASE_IDLE
+        elif self._startup_phase == ACTIVE_PHASE_STOPPING:
+            self._startup_phase = ACTIVE_PHASE_IDLE
 
     def start_tracking(self) -> None:
         calibrator_labels: list[str] = self.get_connected_detector_labels()
@@ -485,48 +476,39 @@ class Connector(MCastComponent):
                 severity="error",
                 message="No calibrators were found. Aborting tracking.")
             return
-        self._detector_resolutions.clear()
-        self._calibrated_resolutions.clear()
-        self._detector_calibration_labels.clear()
-        self._detector_intrinsics.clear()
         request_series: MCastRequestSeries = MCastRequestSeries(
             series=[ListCalibrationDetectorResolutionsRequest()])
-        self.active_request_ids.append(self.request_series_push(
+        self._pending_request_ids.append(self.request_series_push(
             connection_label=calibrator_labels[0],
             request_series=request_series))
         detector_labels: list[str] = self.get_connected_detector_labels()
         for detector_label in detector_labels:
             request_series: MCastRequestSeries = MCastRequestSeries(
                 series=[StartCaptureRequest()])
-            self.active_request_ids.append(self.request_series_push(
+            self._pending_request_ids.append(self.request_series_push(
                 connection_label=detector_label,
                 request_series=request_series))
-        self.current_phase = ACTIVE_PHASE_STARTING_CAPTURE
+        self._startup_phase = ACTIVE_PHASE_STARTING_CAPTURE
 
     def stop_tracking(self) -> None:
         detector_labels: list[str] = self.get_connected_detector_labels()
         for detector_label in detector_labels:
             request_series: MCastRequestSeries = MCastRequestSeries(
                 series=[StopCaptureRequest()])
-            self.active_request_ids.append(self.request_series_push(
+            self._pending_request_ids.append(self.request_series_push(
                 connection_label=detector_label,
                 request_series=request_series))
-        request_series: MCastRequestSeries = MCastRequestSeries(series=[StopPoseSolverRequest()])
-        self.active_request_ids.append(self.request_series_push(
-            connection_label=self.selected_pose_solver_label,
-            request_series=request_series))
+        # request_series: MCastRequestSeries = MCastRequestSeries(series=[StopPoseSolverRequest()])
+        # self.active_request_ids.append(self.request_series_push(
+        #     connection_label=self.selected_pose_solver_label,
+        #     request_series=request_series))
 
-        # Finish up any running passive tasks before we allow controls again
-        for detecting_request in self._passive_detecting_requests.values():
+        for detecting_request in self._live_detectors.values():
             if detecting_request.request_id is not None:
-                self.active_request_ids.append(detecting_request.request_id)
-        self._passive_detecting_requests.clear()
-        if self._passive_solving_request_id is not None:
-            self.active_request_ids.append(self._passive_solving_request_id)
-        self._passive_solving_request_id = None
+                self._pending_request_ids.append(detecting_request.request_id)
+        self._live_detectors.clear()
 
-        self.is_solving = False
-        self.current_phase = ACTIVE_PHASE_STOPPING
+        self._startup_phase = ACTIVE_PHASE_STOPPING
 
     def remove_connection(
         self,
@@ -568,76 +550,44 @@ class Connector(MCastComponent):
 
     def supported_request_types(self) -> dict[type[MCastRequest], Callable[[dict], MCastResponse]]:
         return super().supported_request_types()
-    
-    def set_reference_target(self, marker_id, marker_diameter) -> None:
-        request_series: MCastRequestSeries = MCastRequestSeries(series=[
-            (SetReferenceMarkerRequest(
-                marker_id=marker_id,
-                marker_diameter=marker_diameter))])
-        self.active_request_ids.append(self.request_series_push(
-            connection_label=self.selected_pose_solver_label,
-            request_series=request_series))
         
-    def set_tracked_target(self, marker_id, marker_diameter) -> None:
-        request_series: MCastRequestSeries = MCastRequestSeries(series=[
-            (AddTargetMarkerRequest(
-                marker_id=marker_id,
-                marker_diameter=marker_diameter))])
-        self.active_request_ids.append(self.request_series_push(
-            connection_label=self.selected_pose_solver_label,
-            request_series=request_series))
-        
-    # Right now this function doesn't update on its own
-    # It needs the pose solver panel to call it every frame
+    # Right now this function doesn't update on its own - must be called externally
     def update_loop(self) -> None:
-        ui_needs_update: bool = False
+        if self._running:
+            for detector_label, live_detector in self._live_detectors.items():
+                if live_detector.request_id is not None:
+                    _, live_detector.request_id = self.update_request(request_id=live_detector.request_id)
+                if live_detector.request_id is None:
+                    # if len(live_detector.detected_marker_snapshots) > 0 or \
+                    #    len(live_detector.rejected_marker_snapshots) > 0:
+                    #     detector_timestamp: str = live_detector.marker_snapshot_timestamp.isoformat()
+                    #     marker_request: AddMarkerCornersRequest = AddMarkerCornersRequest(
+                    #         detected_marker_snapshots=live_detector.detected_marker_snapshots,
+                    #         rejected_marker_snapshots=live_detector.rejected_marker_snapshots,
+                    #         detector_label=detector_label,
+                    #         detector_timestamp_utc_iso8601=detector_timestamp)
+                    #     request_series: MCastRequestSeries = MCastRequestSeries(series=[marker_request])
+                    #     live_detector.request_id = self.request_series_push(
+                    #         connection_label=self.selected_pose_solver_label,
+                    #         request_series=request_series)
+                    #     live_detector.detected_marker_snapshots.clear()
+                    #     live_detector.rejected_marker_snapshots.clear()
+                    # else:
+                    request_series: MCastRequestSeries = MCastRequestSeries(series=[GetMarkerSnapshotsRequest()])
+                    live_detector.request_id = self.request_series_push(
+                        connection_label=detector_label,
+                        request_series=request_series)
 
-        if self.is_solving:
-            for detector_label, request_state in self._passive_detecting_requests.items():
-                if request_state.request_id is not None:
-                    _, request_state.request_id = self.update_request(request_id=request_state.request_id)
-                if request_state.request_id is None:
-                    if len(request_state.detected_marker_snapshots) > 0 or \
-                       len(request_state.rejected_marker_snapshots) > 0:
-                        detector_timestamp: str = request_state.marker_snapshot_timestamp.isoformat()
-                        marker_request: AddMarkerCornersRequest = AddMarkerCornersRequest(
-                            detected_marker_snapshots=request_state.detected_marker_snapshots,
-                            rejected_marker_snapshots=request_state.rejected_marker_snapshots,
-                            detector_label=detector_label,
-                            detector_timestamp_utc_iso8601=detector_timestamp)
-                        request_series: MCastRequestSeries = MCastRequestSeries(series=[marker_request])
-                        request_state.request_id = self.request_series_push(
-                            connection_label=self.selected_pose_solver_label,
-                            request_series=request_series)
-                        request_state.detected_marker_snapshots.clear()
-                        request_state.rejected_marker_snapshots.clear()
-                    else:
-                        request_series: MCastRequestSeries = MCastRequestSeries(series=[GetMarkerSnapshotsRequest()])
-                        request_state.request_id = self.request_series_push(
-                            connection_label=detector_label,
-                            request_series=request_series)
-            if self._passive_solving_request_id is not None:
-                _, self._passive_solving_request_id = \
-                    self.update_request(request_id=self._passive_solving_request_id)
-            if self._passive_solving_request_id is None:
-                request_series: MCastRequestSeries = MCastRequestSeries(series=[GetPosesRequest()])
-                self._passive_solving_request_id = self.request_series_push(
-                    connection_label=self.selected_pose_solver_label,
-                    request_series=request_series)
-
-        # TODO: I think this can be moved to BasePanel class
-        if len(self.active_request_ids) > 0:
+        if len(self._pending_request_ids) > 0:
             completed_request_ids: list[uuid.UUID] = list()
-            for request_id in self.active_request_ids:
+            for request_id in self._pending_request_ids:
                 _, remaining_request_id = self.update_request(request_id=request_id)
                 if remaining_request_id is None:
                     completed_request_ids.append(request_id)
             for request_id in completed_request_ids:
-                self.active_request_ids.remove(request_id)
-            if len(self.active_request_ids) == 0:
-                self.on_active_request_ids_processed(self.selected_pose_solver_label)
-
-        return ui_needs_update
+                self._pending_request_ids.remove(request_id)
+            if len(self._pending_request_ids) == 0:
+                self.on_active_request_ids_processed()
     
     def update_request(
         self,
@@ -661,7 +611,6 @@ class Connector(MCastComponent):
             task_description=task_description,
             expected_response_count=expected_response_count)
         return success, None  # We've handled the request, request_id can be set to None
-
 
     async def do_update_frame_for_connection(
         self,
