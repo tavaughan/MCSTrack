@@ -119,7 +119,7 @@ class ControllerFrame(wx.Frame):
 async def connector_frame_repeat(connector: Connector):
     # noinspection PyBroadException
     try:
-        await connector.do_update_frames_for_connections()
+        await connector.update()
     except Exception as e:
         connector.add_status_message(
             severity="error",

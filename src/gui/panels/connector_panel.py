@@ -231,12 +231,10 @@ class ConnectorPanel(BasePanel):
         self._parameter_label.textbox.SetValue(value=str())
 
     def on_connect_pressed(self, _event: wx.CommandEvent):
-        selected_row_label: str | None = self._connection_table.get_selected_row_label()
-        self._connector.begin_connecting(label=selected_row_label)
+        self._connector.start_up()
 
     def on_disconnect_pressed(self, _event: wx.CommandEvent):
-        selected_row_label: str | None = self._connection_table.get_selected_row_label()
-        self._connector.begin_disconnecting(label=selected_row_label)
+        self._connector.shut_down()
 
     def on_connection_selected(self, event: wx.grid.GridEvent):
         if self._is_updating:

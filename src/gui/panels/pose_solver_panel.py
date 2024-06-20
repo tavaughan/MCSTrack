@@ -319,7 +319,7 @@ class PoseSolverPanel(BasePanel):
         self._update_controls()
 
     def on_tracking_start_pressed(self, _event: wx.CommandEvent) -> None:
-        self._connector.start_tracking(mode=Connector.StartupMode.DETECTING_AND_SOLVING)
+        self._connector.start_up(mode=Connector.StartupMode.DETECTING_AND_SOLVING)
         self._is_waiting_for_connector = True
         self._update_controls()
 
@@ -328,7 +328,7 @@ class PoseSolverPanel(BasePanel):
         self._tracking_table.Enable(False)
         self._tracking_display_textbox.SetValue(str())
         self._tracking_display_textbox.Enable(False)
-        self._connector.stop_tracking()
+        self._connector.shut_down()
         self._is_waiting_for_connector = True
         self._update_controls()
 

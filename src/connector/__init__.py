@@ -1,5 +1,5 @@
 from .connector import Connector
 from .structures import \
     ComponentAddress, \
-    LiveConnection, \
+    Connection, \
     ConnectionReport

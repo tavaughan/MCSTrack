@@ -17,14 +17,12 @@ import abc
 import datetime
 from fastapi import WebSocket, WebSocketDisconnect
 import logging
-from pydantic import BaseModel, ValidationError
 from typing import Callable, Optional, TypeVar
 
 logger = logging.getLogger(__name__)
 
 
 ParsableDynamicSingle = TypeVar('ParsableDynamicSingle', bound=MCastParsable)
-ParsableDynamicSeries = TypeVar('ParsableDynamicSeries', bound=BaseModel)
 
 
 class MCastComponent(abc.ABC):
@@ -64,53 +62,15 @@ class MCastComponent(abc.ABC):
         parsable_series_dict: dict,
         supported_types: list[type[ParsableDynamicSingle]]
     ) -> list[ParsableDynamicSingle]:
-        if "series" not in parsable_series_dict or not isinstance(parsable_series_dict["series"], list):
-            message: str = "parsable_series_dict did not contain field series. Input is improperly formatted."
+        try:
+            return MCastParsable.parse_dynamic_series_list(
+                parsable_series_dict=parsable_series_dict,
+                supported_types=supported_types)
+        except ParsingError as e:
             self.add_status_message(
                 severity="error",
-                message=message)
-            raise ParsingError(message)
-
-        output_series: list[ParsableDynamicSingle] = list()
-        for parsable_dict in parsable_series_dict["series"]:
-            if not isinstance(parsable_dict, dict):
-                message: str = "series contained a non-dict element. Input is improperly formatted."
-                self.add_status_message(
-                    severity="error",
-                    message=message)
-                raise ParsingError(message)
-            output_series.append(self.parse_dynamic_single(
-                parsable_dict=parsable_dict,
-                supported_types=supported_types))
-
-        return output_series
-
-    def parse_dynamic_single(
-        self,
-        parsable_dict: dict,
-        supported_types: list[type[ParsableDynamicSingle]]
-    ) -> ParsableDynamicSingle:
-        if "parsable_type" not in parsable_dict or not isinstance(parsable_dict["parsable_type"], str):
-            message: str = "parsable_dict did not contain parsable_type. Input is improperly formatted."
-            self.add_status_message(
-                severity="error",
-                message=message)
-            raise ParsingError(message) from None
-
-        for supported_type in supported_types:
-            if parsable_dict["parsable_type"] == supported_type.parsable_type_identifier():
-                request: ParsableDynamicSingle
-                try:
-                    request = supported_type(**parsable_dict)
-                except ValidationError as e:
-                    raise ParsingError(f"A request of type {supported_type} was ill-formed: {str(e)}") from None
-                return request
-
-        message: str = "parsable_type did not match any expected value. Input is improperly formatted."
-        self.add_status_message(
-            severity="error",
-            message=message)
-        raise ParsingError(message)
+                message=e.message)
+            raise e
 
     def dequeue_status_messages(self, **kwargs) -> DequeueStatusMessagesResponse:
         """
