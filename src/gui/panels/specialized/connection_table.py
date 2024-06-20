@@ -1,6 +1,6 @@
 from .row_selection_table import RowSelectionTable
 from src.connector import \
-    ConnectionTableRow
+    ConnectionReport
 from typing import Final
 import wx
 
@@ -14,7 +14,7 @@ _COL_COUNT: Final[int] = 5
 _COL_LABELS: Final[list[str]] = ["Label", "Role", "IP Address", "Port", "Status"]
 
 
-class ConnectionTable(RowSelectionTable[ConnectionTableRow]):
+class ConnectionTable(RowSelectionTable[ConnectionReport]):
     def __init__(
         self,
         parent: wx.Window,
@@ -28,7 +28,7 @@ class ConnectionTable(RowSelectionTable[ConnectionTableRow]):
     def _set_row_contents(
         self,
         row_index: int,
-        row_content: ConnectionTableRow
+        row_content: ConnectionReport
     ):
         self.table.SetCellValue(
             row=row_index,

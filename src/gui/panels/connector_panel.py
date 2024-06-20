@@ -14,9 +14,9 @@ from src.common.structures import \
     COMPONENT_ROLE_LABEL_POSE_SOLVER, \
     StatusMessage
 from src.connector import \
-    ComponentConnectionStatic, \
+    ComponentAddress, \
     Connector, \
-    ConnectionTableRow
+    ConnectionReport
 from ipaddress import IPv4Address
 from pydantic import ValidationError
 from typing import Final
@@ -213,10 +213,10 @@ class ConnectorPanel(BasePanel):
                 severity="error",
                 message=message)
             return
-        connection: ComponentConnectionStatic
+        component_address: ComponentAddress
         try:
             selected_role_index: int = self._parameter_role.selector.GetSelection()
-            connection: ComponentConnectionStatic = ComponentConnectionStatic(
+            component_address: ComponentAddress = ComponentAddress(
                 label=label,
                 role=self._parameter_role.selector.GetString(n=selected_role_index),
                 ip_address=ip_address,
@@ -227,7 +227,7 @@ class ConnectorPanel(BasePanel):
                 severity="error",
                 message=message)
             return
-        self._connector.add_connection(connection_static=connection)
+        self._connector.add_connection(component_address=component_address)
         self._parameter_label.textbox.SetValue(value=str())
 
     def on_connect_pressed(self, _event: wx.CommandEvent):
@@ -262,9 +262,9 @@ class ConnectorPanel(BasePanel):
 
     def update_loop_connection_table(self):
         selected_row_index: int | None = self._connection_table.get_selected_row_index()
-        updated_connections: list[ConnectionTableRow] = self._connector.get_connection_table_rows()
-        self._connection_table.update_contents(row_contents=updated_connections)
-        if selected_row_index is not None and selected_row_index >= len(updated_connections):
+        connection_reports: list[ConnectionReport] = self._connector.get_connection_reports()
+        self._connection_table.update_contents(row_contents=connection_reports)
+        if selected_row_index is not None and selected_row_index >= len(connection_reports):
             selected_row_index = None
         self._connection_table.set_selected_row_index(selected_row_index)
 

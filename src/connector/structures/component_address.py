@@ -3,10 +3,10 @@ from ipaddress import IPv4Address
 from pydantic import BaseModel, Field
 
 
-class ComponentConnectionStatic(BaseModel):
+class ComponentAddress(BaseModel):
     """
-    Information used to establish a connection and display information about said connection,
-    but nothing that would change without a user's explicit input (e.g. status etc).
+    Information used to establish a connection,
+    there is nothing that should change here without a user's explicit input.
     """
     label: str = Field()
     role: ComponentRoleLabel = Field()
