@@ -1,4 +1,4 @@
-from .mct_parsable import MCTParsable
+from ..structures.mct_parsable import MCTParsable
 import abc
 from pydantic import BaseModel
 

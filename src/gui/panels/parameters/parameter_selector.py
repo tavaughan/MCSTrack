@@ -10,6 +10,7 @@ class ParameterSelector(ParameterBase):
         parent: wx.Window,
         label: str,
         selectable_values: list[str],
+        value: str | None = None,
         space_px: int = ParameterBase.SPACE_PX_DEFAULT
     ):
         super().__init__(parent=parent)
@@ -17,14 +18,20 @@ class ParameterSelector(ParameterBase):
         self.add_label_and_space(sizer=sizer, label_text=label, space_px=space_px)
         self.selector: wx.Choice = wx.Choice(parent=self)
         self.selector.AppendItems(items=selectable_values)
-        self.selector.SetSelection(n=0)
+        if value is not None:
+            self.selector.SetStringSelection(value)
+        else:
+            self.selector.SetSelection(n=0)
         sizer.Add(window=self.selector, flags=wx.SizerFlags(1))
         self.SetSizerAndFit(sizer=sizer)
+
+    def get_value(self) -> str:
+        return self.selector.GetStringSelection()
 
     def set_enabled(
         self,
         enable: bool
-    ):
+    ) -> None:
         super().set_enabled(enable=enable)
         self.selector.Enable(enable=enable)
 

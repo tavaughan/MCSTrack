@@ -8,7 +8,7 @@ from src.detector import \
 from src.detector.api import \
     GetCaptureImageRequest, \
     GetCaptureImageResponse, \
-    GetCapturePropertiesResponse, \
+    GetCameraParametersResponse, \
     GetDetectionParametersResponse, \
     GetMarkerSnapshotsRequest, \
     GetMarkerSnapshotsResponse, \
@@ -87,8 +87,8 @@ def create_app() -> FastAPI:
         return result
 
     @detector_app.get("/get_capture_properties")
-    async def get_capture_properties() -> GetCapturePropertiesResponse:
-        result: GetCapturePropertiesResponse = detector.get_capture_properties()
+    async def get_capture_properties() -> GetCameraParametersResponse:
+        result: GetCameraParametersResponse = detector.get_capture_properties()
         return result
 
     @detector_app.get("/get_detection_parameters")

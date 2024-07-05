@@ -20,9 +20,12 @@ class ParameterCheckbox(ParameterBase):
         sizer.Add(window=self.checkbox, flags=wx.SizerFlags(1))
         self.SetSizerAndFit(sizer=sizer)
 
+    def get_value(self) -> bool:
+        return bool(self.checkbox.GetValue())
+
     def set_enabled(
         self,
         enable: bool
-    ):
+    ) -> None:
         super().set_enabled(enable=enable)
         self.checkbox.Enable(enable=enable)

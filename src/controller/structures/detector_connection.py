@@ -14,7 +14,7 @@ from src.common.structures import \
     MarkerSnapshot
 from src.detector.api import \
     GetCaptureImageResponse, \
-    GetCapturePropertiesResponse, \
+    GetCameraParametersResponse, \
     GetDetectionParametersResponse, \
     GetMarkerSnapshotsResponse, \
     StartCaptureRequest, \
@@ -103,7 +103,7 @@ class DetectorConnection(Connection):
             GetCalibrationImageResponse,
             GetCalibrationResultResponse,
             GetCaptureImageResponse,
-            GetCapturePropertiesResponse,
+            GetCameraParametersResponse,
             GetDetectionParametersResponse,
             GetMarkerSnapshotsResponse,
             ListCalibrationDetectorResolutionsResponse,

@@ -3,6 +3,7 @@ from .base_panel import \
 from .feedback import \
     ImagePanel
 from .parameters import \
+    ParameterBase, \
     ParameterCheckbox, \
     ParameterSelector, \
     ParameterSpinboxFloat, \
@@ -25,19 +26,29 @@ from src.common.structures import \
     DetectionParameters, \
     DetectorFrame, \
     ImageResolution, \
+    KeyValueSimpleAbstract, \
+    KeyValueSimpleBool, \
+    KeyValueSimpleString, \
+    KeyValueSimpleFloat, \
+    KeyValueSimpleInt, \
+    KeyValueMetaAbstract, \
+    KeyValueMetaBool, \
+    KeyValueMetaEnum, \
+    KeyValueMetaFloat, \
+    KeyValueMetaInt, \
     MarkerSnapshot
 from src.controller import \
     MCTController
 from src.detector.api import \
     GetCaptureImageRequest, \
     GetCaptureImageResponse, \
-    GetCapturePropertiesRequest, \
-    GetCapturePropertiesResponse, \
+    GetCameraParametersRequest, \
+    GetCameraParametersResponse, \
     GetDetectionParametersRequest, \
     GetDetectionParametersResponse, \
     GetMarkerSnapshotsRequest, \
     GetMarkerSnapshotsResponse, \
-    SetCapturePropertiesRequest, \
+    SetCameraParametersRequest, \
     SetDetectionParametersRequest
 import cv2
 from io import BytesIO
@@ -66,6 +77,8 @@ _SUPPORTED_CORNER_REFINEMENT_METHODS: Final[list[str]] = [
     "APRILTAG"]
 _CAPTURE_FORMAT: CaptureFormat = ".jpg"
 
+_CAMERA_PARAMETER_SLOT_COUNT: Final[int] = 100
+
 
 class DetectorPanel(BasePanel):
 
@@ -85,18 +98,12 @@ class DetectorPanel(BasePanel):
     _send_capture_parameters_button: wx.Button
     _send_detection_parameters_button: wx.Button
 
+    _camera_parameter_panel: wx.Panel
+    _camera_parameter_sizer: wx.BoxSizer
+    _camera_parameter_uis: list[ParameterBase]
+
     # Look at https://docs.opencv.org/4.x/d5/dae/tutorial_aruco_detection.html
     # for documentation on individual parameters
-
-    _capture_param_resolution: ParameterSelector
-    _capture_param_fps: ParameterSelector
-    _capture_param_auto_exposure: ParameterCheckbox
-    _capture_param_exposure: ParameterSpinboxInteger
-    _capture_param_brightness: ParameterSpinboxInteger
-    _capture_param_contrast: ParameterSpinboxInteger
-    _capture_param_sharpness: ParameterSpinboxInteger
-    _capture_param_gamma: ParameterSpinboxInteger
-    # TODO: powerline_frequency_hz and backlight_compensation
 
     _detection_param_adaptive_thresh_win_size_min: ParameterSpinboxInteger
     _detection_param_adaptive_thresh_win_size_max: ParameterSpinboxInteger
@@ -153,6 +160,8 @@ class DetectorPanel(BasePanel):
         self._live_image_base64 = None
         self._live_markers_detected = list()
         self._live_markers_rejected = list()
+
+        self._camera_parameter_uis = list()
 
         horizontal_split_sizer: wx.BoxSizer = wx.BoxSizer(orient=wx.HORIZONTAL)
 
@@ -219,62 +228,12 @@ class DetectorPanel(BasePanel):
             font_size_delta=2,
             bold=True)
 
-        self._capture_param_resolution = self.add_control_selector(
-            parent=control_panel,
-            sizer=control_sizer,
-            label="Resolution",
-            selectable_values=[str(resolution) for resolution in _SUPPORTED_RESOLUTIONS])
-
-        self._capture_param_fps = self.add_control_selector(
-            parent=control_panel,
-            sizer=control_sizer,
-            label="FPS",
-            selectable_values=_SUPPORTED_FPS)
-
-        self._capture_param_auto_exposure = self.add_control_checkbox(
-            parent=control_panel,
-            sizer=control_sizer,
-            label="Auto-Exposure")
-
-        self._capture_param_exposure = self.add_control_spinbox_integer(
-            parent=control_panel,
-            sizer=control_sizer,
-            label="Exposure",
-            minimum_value=-11,
-            maximum_value=-2,
-            initial_value=-6)
-
-        self._capture_param_brightness = self.add_control_spinbox_integer(
-            parent=control_panel,
-            sizer=control_sizer,
-            label="Brightness",
-            minimum_value=-64,
-            maximum_value=64,
-            initial_value=0)
-
-        self._capture_param_contrast = self.add_control_spinbox_integer(
-            parent=control_panel,
-            sizer=control_sizer,
-            label="Contrast",
-            minimum_value=0,
-            maximum_value=95,
-            initial_value=5)
-
-        self._capture_param_sharpness = self.add_control_spinbox_integer(
-            parent=control_panel,
-            sizer=control_sizer,
-            label="Sharpness",
-            minimum_value=0,
-            maximum_value=100,
-            initial_value=2)
-
-        self._capture_param_gamma = self.add_control_spinbox_integer(
-            parent=control_panel,
-            sizer=control_sizer,
-            label="Gamma",
-            minimum_value=80,
-            maximum_value=300,
-            initial_value=120)
+        self._camera_parameter_panel: wx.Panel = wx.Panel(parent=control_panel)
+        self._camera_parameter_sizer: wx.BoxSizer = wx.BoxSizer(orient=wx.VERTICAL)
+        self._camera_parameter_panel.SetSizer(sizer=self._camera_parameter_sizer)
+        control_sizer.Add(
+            window=self._camera_parameter_panel,
+            flags=wx.SizerFlags(0).Expand())
 
         self._send_capture_parameters_button: wx.Button = self.add_control_button(
             parent=control_panel,
@@ -683,23 +642,41 @@ class DetectorPanel(BasePanel):
             connection_label=selected_detector_label,
             request_series=request_series)
 
+    def begin_get_capture_parameters(self):
+        selected_detector_label: str = self._detector_selector.selector.GetStringSelection()
+        request_series: MCTRequestSeries = MCTRequestSeries(
+            series=[GetCameraParametersRequest()])
+        self._control_blocking_request_id = self._controller.request_series_push(
+            connection_label=selected_detector_label,
+            request_series=request_series)
+        self._update_ui_controls()
+
     def begin_set_capture_parameters(self):
         selected_detector_label: str = self._detector_selector.selector.GetStringSelection()
-        resolution_str: str = self._capture_param_resolution.selector.GetStringSelection()
-        image_resolution = ImageResolution.from_str(in_str=resolution_str)
+        key_values: list[KeyValueSimpleAbstract] = list()
+        for parameter_ui in self._camera_parameter_uis:
+            parameter_type: type[KeyValueSimpleAbstract]
+            label: str = parameter_ui.label.GetLabelText()
+            if isinstance(parameter_ui, ParameterCheckbox):
+                parameter_type = KeyValueSimpleBool
+            elif isinstance(parameter_ui, ParameterSelector):
+                parameter_type = KeyValueSimpleString
+            elif isinstance(parameter_ui, ParameterSpinboxFloat):
+                parameter_type = KeyValueSimpleFloat
+            elif isinstance(parameter_ui, ParameterSpinboxInteger):
+                parameter_type = KeyValueSimpleInt
+            else:
+                self.status_message_source.enqueue_status_message(
+                    severity="error",
+                    message=f"Failed to determine parameter type from UI element for key {label}.")
+                continue
+            key_values.append(parameter_type(
+                key=label,
+                value=parameter_ui.get_value()))
         request_series: MCTRequestSeries = MCTRequestSeries(
             series=[
-                SetCapturePropertiesRequest(
-                    resolution_x_px=image_resolution.x_px,
-                    resolution_y_px=image_resolution.y_px,
-                    fps=int(self._capture_param_fps.selector.GetStringSelection()),
-                    auto_exposure=self._capture_param_auto_exposure.checkbox.GetValue(),
-                    exposure=self._capture_param_exposure.spinbox.GetValue(),
-                    brightness=self._capture_param_brightness.spinbox.GetValue(),
-                    contrast=self._capture_param_contrast.spinbox.GetValue(),
-                    sharpness=self._capture_param_sharpness.spinbox.GetValue(),
-                    gamma=self._capture_param_gamma.spinbox.GetValue()),
-                GetCapturePropertiesRequest()])  # sync
+                SetCameraParametersRequest(parameters=key_values),
+                GetCameraParametersRequest()])  # sync
         self._control_blocking_request_id = self._controller.request_series_push(
             connection_label=selected_detector_label,
             request_series=request_series)
@@ -758,7 +735,7 @@ class DetectorPanel(BasePanel):
         for response in response_series.series:
             if isinstance(response, AddCalibrationImageResponse):
                 self._handle_add_calibration_image_response(response=response)
-            elif isinstance(response, GetCapturePropertiesResponse):
+            elif isinstance(response, GetCameraParametersResponse):
                 self._handle_get_capture_parameters_response(response=response)
             elif isinstance(response, GetDetectionParametersResponse):
                 self._handle_get_detection_parameters_response(response=response)
@@ -789,27 +766,52 @@ class DetectorPanel(BasePanel):
     # noinspection DuplicatedCode
     def _handle_get_capture_parameters_response(
         self,
-        response: GetCapturePropertiesResponse
+        response: GetCameraParametersResponse
     ):
-        if response.resolution_x_px is not None and response.resolution_y_px is not None:
-            image_resolution: ImageResolution = ImageResolution(
-                x_px=response.resolution_x_px,
-                y_px=response.resolution_y_px)
-            self._capture_param_resolution.selector.SetStringSelection(str(image_resolution))
-        if response.fps is not None:
-            self._capture_param_fps.selector.SetStringSelection(str(response.fps))
-        if response.auto_exposure is not None:
-            self._capture_param_auto_exposure.checkbox.SetValue(response.auto_exposure)
-        if response.exposure is not None:
-            self._capture_param_exposure.spinbox.SetValue(response.exposure)
-        if response.brightness is not None:
-            self._capture_param_brightness.spinbox.SetValue(response.brightness)
-        if response.contrast is not None:
-            self._capture_param_contrast.spinbox.SetValue(response.contrast)
-        if response.sharpness is not None:
-            self._capture_param_sharpness.spinbox.SetValue(response.sharpness)
-        if response.gamma is not None:
-            self._capture_param_gamma.spinbox.SetValue(response.gamma)
+        self._camera_parameter_uis.clear()
+        self._camera_parameter_panel.Freeze()
+        self._camera_parameter_sizer.Clear(True)
+        self._camera_parameter_sizer = wx.BoxSizer(orient=wx.VERTICAL)
+        key_value: KeyValueMetaAbstract
+        for parameter_index, key_value in enumerate(response.parameters):
+            if isinstance(key_value, KeyValueMetaBool):
+                self._camera_parameter_uis.append(self.add_control_checkbox(
+                    parent=self._camera_parameter_panel,
+                    sizer=self._camera_parameter_sizer,
+                    label=key_value.key,
+                    value=key_value.value))
+            elif isinstance(key_value, KeyValueMetaEnum):
+                self._camera_parameter_uis.append(self.add_control_selector(
+                    parent=self._camera_parameter_panel,
+                    sizer=self._camera_parameter_sizer,
+                    label=key_value.key,
+                    selectable_values=key_value.allowable_values,
+                    value=key_value.value))
+            elif isinstance(key_value, KeyValueMetaFloat):
+                self._camera_parameter_uis.append(self.add_control_spinbox_float(
+                    parent=self._camera_parameter_panel,
+                    sizer=self._camera_parameter_sizer,
+                    label=key_value.key,
+                    minimum_value=key_value.range_minimum,
+                    maximum_value=key_value.range_maximum,
+                    initial_value=key_value.value,
+                    step_value=key_value.range_step))
+            elif isinstance(key_value, KeyValueMetaInt):
+                self._camera_parameter_uis.append(self.add_control_spinbox_integer(
+                    parent=self._camera_parameter_panel,
+                    sizer=self._camera_parameter_sizer,
+                    label=key_value.key,
+                    minimum_value=key_value.range_minimum,
+                    maximum_value=key_value.range_maximum,
+                    initial_value=key_value.value,
+                    step_value=key_value.range_step))
+            else:
+                self.status_message_source.enqueue_status_message(
+                    severity="error",
+                    message=f"Unsupported parameter type {key_value.parsable_type} will not be handled")
+        self._camera_parameter_panel.SetSizer(self._camera_parameter_sizer)
+        self._camera_parameter_panel.Thaw()
+        self.Layout()
 
     # noinspection DuplicatedCode
     def _handle_get_detection_parameters_response(
@@ -920,6 +922,7 @@ class DetectorPanel(BasePanel):
 
     def on_detector_selected(self, _event: wx.CommandEvent):
         self._live_image_base64 = None
+        self.begin_get_capture_parameters()
         self._update_ui_image()
         self._update_ui_controls()
 
@@ -952,14 +955,8 @@ class DetectorPanel(BasePanel):
         self,
         enable: bool
     ):
-        self._capture_param_resolution.set_enabled(enable=enable)
-        self._capture_param_fps.set_enabled(enable=enable)
-        self._capture_param_auto_exposure.set_enabled(enable=enable)
-        self._capture_param_exposure.set_enabled(enable=enable)
-        self._capture_param_brightness.set_enabled(enable=enable)
-        self._capture_param_contrast.set_enabled(enable=enable)
-        self._capture_param_sharpness.set_enabled(enable=enable)
-        self._capture_param_gamma.set_enabled(enable=enable)
+        for parameter_ui in self._camera_parameter_uis:
+            parameter_ui.set_enabled(enable=enable)
         self._detection_param_adaptive_thresh_win_size_min.set_enabled(enable=enable)
         self._detection_param_adaptive_thresh_win_size_max.set_enabled(enable=enable)
         self._detection_param_adaptive_thresh_win_size_step.set_enabled(enable=enable)
@@ -1041,7 +1038,8 @@ class DetectorPanel(BasePanel):
         self._calibration_capture_button.Enable(enable=True)
 
     def _update_ui_image(self):
-        resolution_str: str = self._capture_param_resolution.selector.GetStringSelection()
+        # TODO: The Detector should tell us the resolution of the image it operated on.
+        resolution_str: str = str(StandardResolutions.RES_640X480)
         display_image: numpy.ndarray
         scale: float | None
         if self._live_image_base64 is not None:

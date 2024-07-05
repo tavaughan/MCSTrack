@@ -1,13 +1,13 @@
 from src.detector.api import \
     GetCaptureImageRequest, \
     GetCaptureImageResponse, \
-    GetCapturePropertiesRequest, \
-    GetCapturePropertiesResponse, \
+    GetCameraParametersRequest, \
+    GetCameraParametersResponse, \
     GetDetectionParametersRequest, \
     GetDetectionParametersResponse, \
     GetMarkerSnapshotsRequest, \
     GetMarkerSnapshotsResponse, \
-    SetCapturePropertiesRequest, \
+    SetCameraParametersRequest, \
     SetDetectionParametersRequest, \
     StartCaptureRequest, \
     StopCaptureRequest
@@ -90,10 +90,10 @@ class Detector(MCTComponent):
 
             # Detector Requests
             GetCaptureImageRequest: self.get_capture_image,
-            GetCapturePropertiesRequest: self.get_capture_properties,
+            GetCameraParametersRequest: self.get_capture_properties,
             GetDetectionParametersRequest: self.get_detection_parameters,
             GetMarkerSnapshotsRequest: self.get_marker_snapshots,
-            SetCapturePropertiesRequest: self.set_capture_properties,
+            SetCameraParametersRequest: self.set_capture_properties,
             SetDetectionParametersRequest: self.set_detection_parameters,
             StartCaptureRequest: self.start_capture,
             StopCaptureRequest: self.stop_capture,
@@ -120,10 +120,10 @@ class Detector(MCTComponent):
                 severity=e.severity,
                 message=e.message)
 
-    def set_capture_properties(self, **kwargs) -> EmptyResponse:
+    def set_capture_properties(self, **kwargs) -> EmptyResponse | ErrorResponse:
         return self._camera_interface.set_capture_properties(**kwargs)
 
-    def get_capture_properties(self, **_kwargs) -> GetCapturePropertiesResponse | ErrorResponse:
+    def get_capture_properties(self, **_kwargs) -> GetCameraParametersResponse | ErrorResponse:
         return self._camera_interface.get_capture_properties(**_kwargs)
 
     def get_capture_image(self, **kwargs) -> GetCaptureImageResponse:

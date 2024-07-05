@@ -2,7 +2,6 @@ from .dequeue_status_messages_request import DequeueStatusMessagesRequest
 from .dequeue_status_messages_response import DequeueStatusMessagesResponse
 from .empty_response import EmptyResponse
 from .error_response import ErrorResponse
-from .mct_parsable import MCTParsable
 from .mct_request import MCTRequest
 from .mct_request_series import MCTRequestSeries
 from .mct_response import MCTResponse

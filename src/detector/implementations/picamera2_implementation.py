@@ -1,7 +1,7 @@
 from .abstract_camera_interface import AbstractCameraInterface
 from ..api import \
-    GetCapturePropertiesResponse, \
-    SetCapturePropertiesRequest
+    GetCameraParametersResponse, \
+    SetCameraParametersRequest
 from ..exceptions import UpdateCaptureError
 from src.common import \
     EmptyResponse, \
@@ -64,10 +64,10 @@ class PiCamera(AbstractCameraInterface):
         :key request: SetCapturePropertiesRequest
         """
 
-        request: SetCapturePropertiesRequest = get_kwarg(
+        request: SetCameraParametersRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=SetCapturePropertiesRequest)
+            arg_type=SetCameraParametersRequest)
 
         if self._captured_image is not None:
 
@@ -102,7 +102,7 @@ class PiCamera(AbstractCameraInterface):
 
         return EmptyResponse()
 
-    def get_capture_properties(self, **_kwargs) -> GetCapturePropertiesResponse | ErrorResponse:
+    def get_capture_properties(self, **_kwargs) -> GetCameraParametersResponse | ErrorResponse:
         if self._captured_image is None:
             return ErrorResponse(
                 message="The capture is not active, and properties cannot be retrieved.")
@@ -116,7 +116,7 @@ class PiCamera(AbstractCameraInterface):
                 **configuration.controls.make_dict(),
                 **self._camera.controls.make_dict()}
             fps: float = int(1.0 / round(frame_duration_us)) * _MICROSECONDS_PER_SECOND
-            ret = GetCapturePropertiesResponse(
+            ret = GetCameraParametersResponse(
                 resolution_x_px=int(configuration.size[0]),
                 resolution_y_px=int(configuration.size[1]),
                 fps=fps,

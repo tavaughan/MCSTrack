@@ -31,8 +31,8 @@ from src.calibrator.api import \
     ListCalibrationResultMetadataRequest, \
     ListCalibrationResultMetadataResponse
 from src.detector.api import \
-    GetCapturePropertiesRequest, \
-    GetCapturePropertiesResponse, \
+    GetCameraParametersRequest, \
+    GetCameraParametersResponse, \
     GetMarkerSnapshotsRequest, \
     GetMarkerSnapshotsResponse
 from src.pose_solver.api import \
@@ -123,7 +123,7 @@ class MCTController(MCTComponent):
                 request_series: MCTRequestSeries = MCTRequestSeries(
                     series=[
                         ListCalibrationDetectorResolutionsRequest(),
-                        GetCapturePropertiesRequest()])
+                        GetCameraParametersRequest()])
                 self._pending_request_ids.append(self.request_series_push(
                     connection_label=detector_label,
                     request_series=request_series))
@@ -338,7 +338,7 @@ class MCTController(MCTComponent):
 
     def handle_response_get_capture_properties(
         self,
-        response: GetCapturePropertiesResponse,
+        response: GetCameraParametersResponse,
         detector_label: str
     ) -> None:
         detector_connection: DetectorConnection = self._get_connection(
@@ -349,9 +349,17 @@ class MCTController(MCTComponent):
                 severity="error",
                 message=f"Failed to find DetectorConnection with label {detector_label}.")
             return
-        detector_connection.current_resolution = ImageResolution(
-            x_px=response.resolution_x_px,
-            y_px=response.resolution_y_px)
+        # TODO: The code below will be rendered obsolete once the communications are refactored such that
+        #       the Detector provides us with the current resolution without being explicitly asked for it.
+        for key_value in response.parameters:
+            if key_value.key == "Resolution":  # Hard-coded key that will be removed in a future revision
+                detector_connection.current_resolution = ImageResolution.from_str(key_value.value)
+                return
+        if detector_connection.current_resolution is None:
+            self.status_message_source.enqueue_status_message(
+                severity="error",
+                message=f"Failed to find resolution of DetectorConnection with label {detector_label}.")
+            return
 
     def handle_response_get_calibration_result(
         self,
@@ -485,7 +493,7 @@ class MCTController(MCTComponent):
             elif isinstance(response, GetCalibrationResultResponse):
                 self.handle_response_get_calibration_result(response=response)
                 success = True
-            elif isinstance(response, GetCapturePropertiesResponse):
+            elif isinstance(response, GetCameraParametersResponse):
                 self.handle_response_get_capture_properties(
                     response=response,
                     detector_label=response_series.responder)

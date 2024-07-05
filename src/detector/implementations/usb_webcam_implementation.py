@@ -1,28 +1,79 @@
-from src.detector.api import \
-    GetCapturePropertiesResponse, \
-    SetCapturePropertiesRequest
-from src.detector.exceptions import UpdateCaptureError
+from .abstract_camera_interface import AbstractCameraInterface
+from ..api import \
+    GetCameraParametersResponse, \
+    SetCameraParametersRequest
+from ..exceptions import UpdateCaptureError
 from src.common import \
     EmptyResponse, \
     ErrorResponse, \
     get_kwarg, \
-    MCTResponse
-from src.common.structures.capture_status import CaptureStatus
-
-from src.detector.implementations import AbstractCameraInterface
-
+    MCTResponse, \
+    StandardResolutions
+from src.common.structures import \
+    CaptureStatus, \
+    ImageResolution, \
+    KeyValueSimpleAbstract, \
+    KeyValueSimpleBool, \
+    KeyValueSimpleString, \
+    KeyValueSimpleFloat, \
+    KeyValueSimpleInt, \
+    KeyValueMetaAbstract, \
+    KeyValueMetaBool, \
+    KeyValueMetaEnum, \
+    KeyValueMetaFloat, \
+    KeyValueMetaInt
 import cv2
 import datetime
 import logging
-import numpy
 import os
+from typing import Final
+
 
 logger = logging.getLogger(__name__)
+
+
+_CAMERA_RESOLUTION_KEY: Final[str] = "Resolution"
+_CAMERA_RESOLUTION_DEFAULT: Final[str] = "640x480"
+# This list is by no means exhaustive, but it should probably
+# capture a reasonable cross-section of commonly-used camera image resolutions.
+# Ideally we can query the camera/driver for supported resolutions and use that instead of this list.
+_CAMERA_RESOLUTION_ALLOWABLE: Final[list[str]] = [str(resolution) for resolution in StandardResolutions.as_list()]
+_CAMERA_FPS_KEY: Final[str] = "FramesPerSecond"
+_CAMERA_FPS_DEFAULT: Final[float] = 30.0
+_CAMERA_FPS_RANGE_MINIMUM: Final[float] = 1.0
+_CAMERA_FPS_RANGE_MAXIMUM: Final[float] = 500.0
+_CAMERA_FPS_RANGE_STEP: Final[float] = 1.0
+_CAMERA_AUTO_EXPOSURE_KEY: Final[str] = "AutoExposure"
+_CAMERA_AUTO_EXPOSURE_DEFAULT: Final[bool] = False
+_CAMERA_EXPOSURE_KEY: Final[str] = "Exposure"
+# Note the different value ranges depending on operating system/backend
+_CAMERA_EXPOSURE_WINDOWS_DEFAULT: Final[int] = -6
+_CAMERA_EXPOSURE_WINDOWS_RANGE_MINIMUM: Final[int] = -13
+_CAMERA_EXPOSURE_WINDOWS_RANGE_MAXIMUM: Final[int] = 0
+_CAMERA_EXPOSURE_UNIX_DEFAULT: Final[int] = 33
+_CAMERA_EXPOSURE_UNIX_RANGE_MAXIMUM: Final[int] = 1000000
+_CAMERA_EXPOSURE_UNIX_RANGE_MINIMUM: Final[int] = 1
+_CAMERA_BRIGHTNESS_KEY: Final[str] = "Brightness"
+_CAMERA_BRIGHTNESS_DEFAULT: Final[int] = 0
+_CAMERA_BRIGHTNESS_RANGE_MINIMUM: Final[int] = -64
+_CAMERA_BRIGHTNESS_RANGE_MAXIMUM: Final[int] = 64
+_CAMERA_CONTRAST_KEY: Final[str] = "Contrast"
+_CAMERA_CONTRAST_DEFAULT: Final[int] = 5
+_CAMERA_CONTRAST_RANGE_MINIMUM: Final[int] = 0
+_CAMERA_CONTRAST_RANGE_MAXIMUM: Final[int] = 95
+_CAMERA_SHARPNESS_KEY: Final[str] = "Sharpness"
+_CAMERA_SHARPNESS_DEFAULT: Final[int] = 2
+_CAMERA_SHARPNESS_RANGE_MINIMUM: Final[int] = 0
+_CAMERA_SHARPNESS_RANGE_MAXIMUM: Final[int] = 100
+_CAMERA_GAMMA_KEY: Final[str] = "Gamma"
+_CAMERA_GAMMA_DEFAULT: Final[int] = 120
+_CAMERA_GAMMA_RANGE_MINIMUM: Final[int] = 80
+_CAMERA_GAMMA_RANGE_MAXIMUM: Final[int] = 300
+
 
 class USBWebcamWithOpenCV(AbstractCameraInterface):
 
     _capture: cv2.VideoCapture | None
-    _captured_image: numpy.ndarray | None
     _captured_timestamp_utc: datetime.datetime
     _capture_device_id: str | int
     _capture_status: CaptureStatus  # internal bookkeeping
@@ -40,15 +91,16 @@ class USBWebcamWithOpenCV(AbstractCameraInterface):
         if self._capture is not None:
             self._capture.release()
 
-    def _detect_os_and_open_video(self,capture_device_id):
-        # cv2.CAP_DSHOW does not work on linux, but is necessary on windows
-        # The following is to check which platform we are on
-        if os.name == 'nt':
+    @staticmethod
+    def _detect_os_and_open_video(capture_device_id):
+        if os.name == "nt":
             return cv2.VideoCapture(capture_device_id, cv2.CAP_DSHOW)
+        elif os.name == "posix":
+            return cv2.VideoCapture(capture_device_id, cv2.CAP_V4L2)
         else:
-            return cv2.VideoCapture(capture_device_id)
+            raise RuntimeError(f"The current platform ({os.name}) is not supported.")
 
-    def internal_update_capture(self) -> tuple[str,str] | None:
+    def internal_update_capture(self) -> None:
         grabbed_frame: bool
         grabbed_frame = self._capture.grab()
         if not grabbed_frame:
@@ -69,53 +121,143 @@ class USBWebcamWithOpenCV(AbstractCameraInterface):
         self._captured_timestamp_utc = datetime.datetime.utcnow()
 
     # noinspection DuplicatedCode
-    def set_capture_properties(self, **kwargs) -> EmptyResponse:
+    def set_capture_properties(self, **kwargs) -> EmptyResponse | ErrorResponse:
         """
         :key request: SetCapturePropertiesRequest
         """
 
-        request: SetCapturePropertiesRequest = get_kwarg(
+        request: SetCameraParametersRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=SetCapturePropertiesRequest)
+            arg_type=SetCameraParametersRequest)
 
-        if self._capture is not None:
-            if request.resolution_x_px is not None:
-                self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, float(request.resolution_x_px))
-            if request.resolution_y_px is not None:
-                self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, float(request.resolution_y_px))
-            if request.fps is not None:
-                self._capture.set(cv2.CAP_PROP_FPS, float(request.fps))
-            if request.auto_exposure is not None:
-                self._capture.set(cv2.CAP_PROP_AUTO_EXPOSURE, float(request.auto_exposure))
-            if request.exposure is not None:
-                self._capture.set(cv2.CAP_PROP_EXPOSURE, float(request.exposure))
-            if request.brightness is not None:
-                self._capture.set(cv2.CAP_PROP_BRIGHTNESS, float(request.brightness))
-            if request.contrast is not None:
-                self._capture.set(cv2.CAP_PROP_CONTRAST, float(request.contrast))
-            if request.sharpness is not None:
-                self._capture.set(cv2.CAP_PROP_SHARPNESS, float(request.sharpness))
-            if request.gamma is not None:
-                self._capture.set(cv2.CAP_PROP_GAMMA, float(request.gamma))
+        if self._capture is None:
+            return ErrorResponse(message="Capture is None.")
+
+        mismatched_keys: list[str] = list()
+
+        key_value: KeyValueSimpleAbstract
+        for key_value in request.parameters:
+            if key_value.key == _CAMERA_RESOLUTION_KEY:
+                if not isinstance(key_value, KeyValueSimpleString):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                try:
+                    resolution: ImageResolution = ImageResolution.from_str(key_value.value)
+                    self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, float(resolution.x_px))
+                    self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, float(resolution.y_px))
+                except ValueError:
+                    mismatched_keys.append(key_value.key)
+                    continue
+            elif key_value.key == _CAMERA_FPS_KEY:
+                if not isinstance(key_value, KeyValueSimpleFloat):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                self._capture.set(cv2.CAP_PROP_FPS, key_value.value)
+            elif key_value.key == _CAMERA_AUTO_EXPOSURE_KEY:
+                if not isinstance(key_value, KeyValueSimpleBool):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                self._capture.set(cv2.CAP_PROP_AUTO_EXPOSURE, float(key_value.value))
+            elif key_value.key == _CAMERA_EXPOSURE_KEY:
+                if not isinstance(key_value, KeyValueSimpleInt):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                self._capture.set(cv2.CAP_PROP_EXPOSURE, float(key_value.value))
+            elif key_value.key == _CAMERA_BRIGHTNESS_KEY:
+                if not isinstance(key_value, KeyValueSimpleInt):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                self._capture.set(cv2.CAP_PROP_BRIGHTNESS, float(key_value.value))
+            elif key_value.key == _CAMERA_CONTRAST_KEY:
+                if not isinstance(key_value, KeyValueSimpleInt):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                self._capture.set(cv2.CAP_PROP_CONTRAST, float(key_value.value))
+            elif key_value.key == _CAMERA_SHARPNESS_KEY:
+                if not isinstance(key_value, KeyValueSimpleInt):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                self._capture.set(cv2.CAP_PROP_SHARPNESS, float(key_value.value))
+            elif key_value.key == _CAMERA_GAMMA_KEY:
+                if not isinstance(key_value, KeyValueSimpleInt):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                self._capture.set(cv2.CAP_PROP_GAMMA, float(key_value.value))
+            else:
+                mismatched_keys.append(key_value.key)
+
+        if len(mismatched_keys) > 0:
+            return ErrorResponse(
+                message=f"The following parameters could not be applied due to key mismatch: {str(mismatched_keys)}")
+
         return EmptyResponse()
 
-    def get_capture_properties(self, **_kwargs) -> GetCapturePropertiesResponse | ErrorResponse:
+    def get_capture_properties(self, **_kwargs) -> GetCameraParametersResponse | ErrorResponse:
         if self._capture is None:
             return ErrorResponse(
                 message="The capture is not active, and properties cannot be retrieved.")
-        else:
-            return GetCapturePropertiesResponse(
-                resolution_x_px=int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH)),
-                resolution_y_px=int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-                fps=int(round(self._capture.get(cv2.CAP_PROP_FPS))),
-                auto_exposure=bool(round(self._capture.get(cv2.CAP_PROP_AUTO_EXPOSURE))),
-                exposure=int(self._capture.get(cv2.CAP_PROP_EXPOSURE)),
-                brightness=int(self._capture.get(cv2.CAP_PROP_BRIGHTNESS)),
-                contrast=int(self._capture.get(cv2.CAP_PROP_CONTRAST)),
-                sharpness=int(self._capture.get(cv2.CAP_PROP_SHARPNESS)),
-                gamma=int(self._capture.get(cv2.CAP_PROP_GAMMA)))
-        # TODO: Get powerline_frequency_hz and backlight_compensation
+
+        key_values: list[KeyValueMetaAbstract] = list()
+
+        resolution_str: str = \
+            f"{int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH))}x" + \
+            f"{int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT))}"
+        key_values.append(KeyValueMetaEnum(
+            key=_CAMERA_RESOLUTION_KEY,
+            value=resolution_str,
+            allowable_values=_CAMERA_RESOLUTION_ALLOWABLE))
+
+        key_values.append(KeyValueMetaFloat(
+            key=_CAMERA_FPS_KEY,
+            value=self._capture.get(cv2.CAP_PROP_FPS),
+            range_minimum=_CAMERA_FPS_RANGE_MINIMUM,
+            range_maximum=_CAMERA_FPS_RANGE_MAXIMUM,
+            range_step=_CAMERA_FPS_RANGE_STEP))
+
+        key_values.append(KeyValueMetaBool(
+            key=_CAMERA_AUTO_EXPOSURE_KEY,
+            value=bool(round(self._capture.get(cv2.CAP_PROP_AUTO_EXPOSURE)))))
+
+        # exposure implementations vary by operating system
+        if os.name == "nt":  # Windows
+            key_values.append(KeyValueMetaInt(
+                key=_CAMERA_EXPOSURE_KEY,
+                value=int(round(self._capture.get(cv2.CAP_PROP_EXPOSURE))),
+                range_minimum=_CAMERA_EXPOSURE_WINDOWS_RANGE_MINIMUM,
+                range_maximum=_CAMERA_EXPOSURE_WINDOWS_RANGE_MAXIMUM))
+        elif os.name == "posix":  # Unix
+            key_values.append(KeyValueMetaInt(
+                key=_CAMERA_EXPOSURE_KEY,
+                value=int(round(self._capture.get(cv2.CAP_PROP_EXPOSURE))),
+                range_minimum=_CAMERA_EXPOSURE_UNIX_RANGE_MINIMUM,
+                range_maximum=_CAMERA_EXPOSURE_UNIX_RANGE_MAXIMUM))
+
+        key_values.append(KeyValueMetaInt(
+            key=_CAMERA_BRIGHTNESS_KEY,
+            value=int(round(self._capture.get(cv2.CAP_PROP_BRIGHTNESS))),
+            range_minimum=_CAMERA_BRIGHTNESS_RANGE_MINIMUM,
+            range_maximum=_CAMERA_BRIGHTNESS_RANGE_MAXIMUM))
+
+        key_values.append(KeyValueMetaInt(
+            key=_CAMERA_CONTRAST_KEY,
+            value=int(round(self._capture.get(cv2.CAP_PROP_CONTRAST))),
+            range_minimum=_CAMERA_CONTRAST_RANGE_MINIMUM,
+            range_maximum=_CAMERA_CONTRAST_RANGE_MAXIMUM))
+
+        key_values.append(KeyValueMetaInt(
+            key=_CAMERA_SHARPNESS_KEY,
+            value=int(round(self._capture.get(cv2.CAP_PROP_SHARPNESS))),
+            range_minimum=_CAMERA_SHARPNESS_RANGE_MINIMUM,
+            range_maximum=_CAMERA_SHARPNESS_RANGE_MAXIMUM))
+
+        key_values.append(KeyValueMetaInt(
+            key=_CAMERA_GAMMA_KEY,
+            value=int(round(self._capture.get(cv2.CAP_PROP_GAMMA))),
+            range_minimum=_CAMERA_GAMMA_RANGE_MINIMUM,
+            range_maximum=_CAMERA_GAMMA_RANGE_MAXIMUM))
+
+        return GetCameraParametersResponse(parameters=key_values)
 
     def start_capture(self, **kwargs) -> MCTResponse:
         if isinstance(self._capture_device_id, str) and self._capture_device_id.isnumeric():
@@ -126,10 +268,22 @@ class USBWebcamWithOpenCV(AbstractCameraInterface):
         self._capture = self._detect_os_and_open_video(self._capture_device_id)
         # NOTE: The USB3 cameras bought for this project appear to require some basic parameters to be set,
         #       otherwise frame grab results in error
+        default_resolution: ImageResolution = ImageResolution.from_str(_CAMERA_RESOLUTION_DEFAULT)
         self._capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-        self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        self._capture.set(cv2.CAP_PROP_FPS, 60)
+        self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, float(default_resolution.x_px))
+        self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, float(default_resolution.y_px))
+        self._capture.set(cv2.CAP_PROP_FPS, float(_CAMERA_FPS_DEFAULT))
+
+        # These others we set to maintain consistency between start/stop cycles
+        self._capture.set(cv2.CAP_PROP_AUTO_EXPOSURE, float(_CAMERA_AUTO_EXPOSURE_DEFAULT))
+        if os.name == "nt":  # Windows
+            self._capture.set(cv2.CAP_PROP_EXPOSURE, float(_CAMERA_EXPOSURE_WINDOWS_DEFAULT))
+        elif os.name == "posix":  # Unix
+            self._capture.set(cv2.CAP_PROP_EXPOSURE, float(_CAMERA_EXPOSURE_UNIX_DEFAULT))
+        self._capture.set(cv2.CAP_PROP_BRIGHTNESS, float(_CAMERA_BRIGHTNESS_DEFAULT))
+        self._capture.set(cv2.CAP_PROP_CONTRAST, float(_CAMERA_CONTRAST_DEFAULT))
+        self._capture.set(cv2.CAP_PROP_SHARPNESS, float(_CAMERA_SHARPNESS_DEFAULT))
+        self._capture.set(cv2.CAP_PROP_GAMMA, float(_CAMERA_GAMMA_DEFAULT))
 
         self._capture_status.status = CaptureStatus.Status.RUNNING
         return EmptyResponse()

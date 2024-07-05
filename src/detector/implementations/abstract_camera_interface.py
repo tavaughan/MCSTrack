@@ -5,7 +5,7 @@ from src.common import \
     get_kwarg, \
     MCTResponse
 from src.detector.api import \
-    GetCapturePropertiesResponse, \
+    GetCameraParametersResponse, \
     GetCaptureImageResponse, \
     GetCaptureImageRequest
 from src.common.structures.capture_status import CaptureStatus
@@ -17,6 +17,7 @@ import numpy
 
 class AbstractCameraInterface(abc.ABC):
 
+    _captured_image: numpy.ndarray | None
     _captured_timestamp_utc: datetime.datetime
     _capture_status: CaptureStatus  # internal bookkeeping
 
@@ -26,10 +27,10 @@ class AbstractCameraInterface(abc.ABC):
     def internal_update_capture(self) -> None:
         pass
 
-    def set_capture_properties(self, **kwargs) -> EmptyResponse:
+    def set_capture_properties(self, **kwargs) -> EmptyResponse | ErrorResponse:
         pass
 
-    def get_capture_properties(self, **_kwargs) -> GetCapturePropertiesResponse | ErrorResponse:
+    def get_capture_properties(self, **_kwargs) -> GetCameraParametersResponse | ErrorResponse:
         pass
 
     def start_capture(self, **kwargs) -> MCTResponse:
@@ -38,7 +39,7 @@ class AbstractCameraInterface(abc.ABC):
     def stop_capture(self, **kwargs) -> MCTResponse:
         pass
 
-    def get_capture_image(self, **kwargs) -> GetCaptureImageResponse:
+    def get_capture_image(self, **kwargs) -> GetCaptureImageResponse | ErrorResponse:
         """
         :key request: GetCaptureImageRequest
         """

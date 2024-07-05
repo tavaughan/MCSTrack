@@ -4,13 +4,13 @@ from src.common.api import \
     DequeueStatusMessagesRequest, \
     DequeueStatusMessagesResponse, \
     ErrorResponse, \
-    MCTParsable, \
     MCTRequest, \
     MCTRequestSeries, \
     MCTResponse, \
     MCTResponseSeries
 from src.common.exceptions import MCTParsingError
 from src.common.structures import \
+    MCTParsable, \
     SeverityLabel, \
     StatusMessage
 import abc

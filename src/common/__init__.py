@@ -3,7 +3,6 @@ from .api import \
     DequeueStatusMessagesResponse, \
     EmptyResponse, \
     ErrorResponse, \
-    MCTParsable, \
     MCTRequest, \
     MCTRequestSeries, \
     MCTResponse, \

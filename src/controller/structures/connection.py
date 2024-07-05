@@ -1,11 +1,13 @@
 from .mct_component_address import MCTComponentAddress
 from .connection_report import ConnectionReport
 from src.common import \
-    MCTParsable, \
     MCTRequestSeries, \
     MCTResponse, \
     MCTResponseSeries
-from src.common.structures import StatusMessage, SeverityLabel
+from src.common.structures import \
+    MCTParsable, \
+    SeverityLabel, \
+    StatusMessage
 import abc
 import datetime
 from enum import StrEnum

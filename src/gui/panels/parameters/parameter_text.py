@@ -19,6 +19,9 @@ class ParameterText(ParameterBase):
         sizer.Add(window=self.textbox, flags=wx.SizerFlags(1))
         self.SetSizerAndFit(sizer=sizer)
 
+    def get_value(self) -> str:
+        return str(self.textbox.GetValue())
+
     def set_enabled(
         self,
         enable: bool

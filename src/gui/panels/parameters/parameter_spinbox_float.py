@@ -2,6 +2,7 @@ from .parameter_base import ParameterBase
 import wx
 
 
+# noinspection DuplicatedCode
 class ParameterSpinboxFloat(ParameterBase):
     spinbox: wx.SpinCtrlDouble
 
@@ -27,9 +28,12 @@ class ParameterSpinboxFloat(ParameterBase):
         sizer.Add(window=self.spinbox, flags=wx.SizerFlags(1))
         self.SetSizerAndFit(sizer=sizer)
 
+    def get_value(self) -> float:
+        return float(self.spinbox.GetValue())
+
     def set_enabled(
         self,
         enable: bool
-    ):
+    ) -> None:
         super().set_enabled(enable=enable)
         self.spinbox.Enable(enable=enable)

@@ -1,14 +1,13 @@
-import abc
-import datetime
+from ..api import \
+    GetDetectionParametersResponse, \
+    GetMarkerSnapshotsResponse
 from src.common import \
     EmptyResponse, \
     ErrorResponse
-from src.common.structures import MarkerCornerImagePoint
 from src.common.structures import MarkerStatus
-from src.detector.api import \
-    GetDetectionParametersResponse, \
-    GetMarkerSnapshotsResponse
-from typing import Any
+import abc
+import datetime
+
 
 class AbstractMarkerInterface(abc.ABC):
     marker_status: MarkerStatus  # internal bookkeeping
