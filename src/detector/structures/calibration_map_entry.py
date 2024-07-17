@@ -1,8 +1,8 @@
 from .calibration_map_value import CalibrationMapValue
-from src.common.structures.detector_resolution import DetectorResolution
+from src.common.structures import ImageResolution
 from pydantic import BaseModel, Field
 
 
 class CalibrationMapEntry(BaseModel):
-    key: DetectorResolution = Field()
+    key: ImageResolution = Field()
     value: CalibrationMapValue = Field()

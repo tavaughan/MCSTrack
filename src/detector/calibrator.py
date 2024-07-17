@@ -31,7 +31,6 @@ from src.common import \
     MCTRequest, \
     MCTResponse
 from src.common.structures import \
-    DetectorResolution, \
     ImageResolution, \
     IntrinsicCalibration, \
     IntrinsicCalibrationFrameResult, \
@@ -58,7 +57,7 @@ logger = logging.getLogger(__name__)
 class Calibrator:
 
     _configuration: CalibratorConfiguration
-    _calibration_map: dict[DetectorResolution, CalibrationMapValue]
+    _calibration_map: dict[ImageResolution, CalibrationMapValue]
 
     CALIBRATION_MAP_FILENAME: Final[str] = "calibration_map.json"
 
@@ -93,26 +92,23 @@ class Calibrator:
             key="request",
             arg_type=object)
         image_data: numpy.ndarray = ImageCoding.base64_to_image(input_base64=request.image_base64, color_mode="color")
-        image_resolution: ImageResolution = ImageResolution(x_px=image_data.shape[1], y_px=image_data.shape[0])
-        calibration_map_key: DetectorResolution = DetectorResolution(
-            detector_serial_identifier=request.detector_serial_identifier,
-            image_resolution=image_resolution)
+        map_key: ImageResolution = ImageResolution(x_px=image_data.shape[1], y_px=image_data.shape[0])
         # Before making any changes to the calibration map, make sure folders exist,
         # and that this file does not somehow already exist (highly unlikely)
-        key_path: str = self._path_for_map_key(calibration_map_key=calibration_map_key)
+        key_path: str = self._path_for_map_key(map_key=map_key)
         if not self._exists(path=key_path, pathtype="path", create_path=True):
             return ErrorResponse(message=f"Failed to create storage location for input image.")
         image_identifier: str = str(uuid.uuid4())
         image_filepath = self._filepath_for_calibration_image(
-            calibration_map_key=calibration_map_key,
+            map_key=map_key,
             image_identifier=image_identifier)
         if os.path.exists(image_filepath):
             return ErrorResponse(
                 message=f"Image {image_identifier} appears to already exist. This is never expected to occur. "
                         f"Please try again, and if this error continues to occur then please report a bug.")
-        if calibration_map_key not in self._calibration_map:
-            self._calibration_map[calibration_map_key] = CalibrationMapValue()
-        self._calibration_map[calibration_map_key].image_metadata_list.append(
+        if map_key not in self._calibration_map:
+            self._calibration_map[map_key] = CalibrationMapValue()
+        self._calibration_map[map_key].image_metadata_list.append(
             CalibrationImageMetadata(identifier=image_identifier))
         # noinspection PyTypeChecker
         image_bytes = ImageCoding.image_to_bytes(image_data=image_data, image_format=Calibrator.IMAGE_FORMAT)
@@ -127,13 +123,10 @@ class Calibrator:
             key="request",
             arg_type=CalibrationCalculateRequest)
 
-        calibration_key: DetectorResolution = DetectorResolution(
-            detector_serial_identifier=request.detector_serial_identifier,
-            image_resolution=request.image_resolution)
+        calibration_key: ImageResolution = request.image_resolution
         if calibration_key not in self._calibration_map:
             return ErrorResponse(
-                message=f"No images for given detector {request.detector_serial_identifier} "
-                        f"and resolution {str(request.image_resolution)} found.")
+                message=f"No images for given resolution {str(request.image_resolution)} found.")
 
         # TODO: Instead of detecting the markers here, maybe the detector could do it instead (just send the points/ids)
 
@@ -153,7 +146,7 @@ class Calibrator:
             if image_metadata.state != CalibrationImageState.SELECT:
                 continue
             image_filepath: str = self._filepath_for_calibration_image(
-                calibration_map_key=calibration_key,
+                map_key=calibration_key,
                 image_identifier=image_metadata.identifier)
             if not self._exists(path=image_filepath, pathtype="filepath"):
                 self.add_status_message(
@@ -257,7 +250,7 @@ class Calibrator:
 
         result_identifier: str = str(uuid.uuid4())
         result_filepath = self._filepath_for_calibration_result(
-            calibration_map_key=calibration_key,
+            map_key=calibration_key,
             result_identifier=result_identifier)
         IOUtils.json_write(
             filepath=result_filepath,
@@ -281,7 +274,7 @@ class Calibrator:
             for image_index, image in enumerate(calibration_value.image_metadata_list):
                 if image.state == CalibrationImageState.DELETE:
                     self._filepath_delete_if_exists(self._filepath_for_calibration_image(
-                        calibration_map_key=calibration_key,
+                        map_key=calibration_key,
                         image_identifier=image.identifier))
                     image_indices_to_delete.append(image_index)
             for i in reversed(image_indices_to_delete):
@@ -290,7 +283,7 @@ class Calibrator:
             for result_index, result in enumerate(calibration_value.result_metadata_list):
                 if result.state == CalibrationResultState.DELETE:
                     self._filepath_delete_if_exists(self._filepath_for_calibration_result(
-                        calibration_map_key=calibration_key,
+                        map_key=calibration_key,
                         result_identifier=result.identifier))
                     result_indices_to_delete.append(result_index)
             for i in reversed(result_indices_to_delete):
@@ -305,12 +298,12 @@ class Calibrator:
             key="request",
             arg_type=CalibrationImageGetRequest)
         found_count: int = 0
-        matching_detector_resolution: DetectorResolution | None = None
-        for detector_resolution in self._calibration_map:
-            for image in self._calibration_map[detector_resolution].image_metadata_list:
+        matching_image_resolution: ImageResolution | None = None
+        for image_resolution in self._calibration_map:
+            for image in self._calibration_map[image_resolution].image_metadata_list:
                 if image.identifier == request.image_identifier:
                     found_count += 1
-                    matching_detector_resolution = detector_resolution
+                    matching_image_resolution = image_resolution
                     break
         if found_count < 1:
             return ErrorResponse(
@@ -320,13 +313,12 @@ class Calibrator:
                 message=f"Image identifier {request.image_identifier} is associated with multiple images.")
 
         image_filepath = self._filepath_for_calibration_image(
-            calibration_map_key=matching_detector_resolution,
+            map_key=matching_image_resolution,
             image_identifier=request.image_identifier)
         if not os.path.exists(image_filepath):
             return ErrorResponse(
                 message=f"File does not exist for image {request.image_identifier} "
-                        f"and given detector {matching_detector_resolution.detector_serial_identifier} "
-                        f"and resolution {str(matching_detector_resolution.image_resolution)}.")
+                        f"and given resolution {str(matching_image_resolution)}.")
         image_bytes: bytes
         try:
             with (open(image_filepath, 'rb') as in_file):
@@ -334,8 +326,7 @@ class Calibrator:
         except OSError:
             return ErrorResponse(
                 message=f"Failed to open image {request.image_identifier} for "
-                        f"given detector {matching_detector_resolution.detector_serial_identifier} "
-                        f"and resolution {str(matching_detector_resolution.image_resolution)}.")
+                        f"given resolution {str(matching_image_resolution)}.")
         image_base64 = ImageCoding.bytes_to_base64(image_bytes=image_bytes)
         return CalibrationImageGetResponse(image_base64=image_base64)
 
@@ -346,28 +337,27 @@ class Calibrator:
             key="request",
             arg_type=CalibrationResultGetRequest)
         found_count: int = 0
-        matching_detector_resolution: DetectorResolution | None = None
-        for detector_resolution in self._calibration_map:
-            for result in self._calibration_map[detector_resolution].result_metadata_list:
+        matching_image_resolution: ImageResolution | None = None
+        for image_resolution in self._calibration_map:
+            for result in self._calibration_map[image_resolution].result_metadata_list:
                 if result.identifier == request.result_identifier:
                     found_count += 1
-                    matching_detector_resolution = detector_resolution
+                    matching_image_resolution = image_resolution
                     break
         if found_count < 1:
             return ErrorResponse(
-                message=f"Image identifier {request.result_identifier} is not associated with any image.")
+                message=f"Image identifier {request.result_identifier} is not associated with any result.")
         elif found_count > 1:
             return ErrorResponse(
-                message=f"Image identifier {request.result_identifier} is associated with multiple images.")
+                message=f"Image identifier {request.result_identifier} is associated with multiple results.")
 
         result_filepath = self._filepath_for_calibration_result(
-            calibration_map_key=matching_detector_resolution,
+            map_key=matching_image_resolution,
             result_identifier=request.result_identifier)
         if not os.path.exists(result_filepath):
             return ErrorResponse(
                 message=f"File does not exist for result {request.result_identifier} "
-                        f"and given detector {matching_detector_resolution.detector_serial_identifier} "
-                        f"and resolution {str(matching_detector_resolution.image_resolution)}.")
+                        f"and given resolution {str(matching_image_resolution)}.")
         result_json_raw: str
         try:
             with (open(result_filepath, 'r') as in_file):
@@ -375,22 +365,20 @@ class Calibrator:
         except OSError:
             return ErrorResponse(
                 message=f"Failed to open result {request.result_identifier} for "
-                        f"given detector {matching_detector_resolution.detector_serial_identifier} "
-                        f"and resolution {str(matching_detector_resolution.image_resolution)}.")
+                        f"given resolution {str(matching_image_resolution)}.")
         result_json_dict: dict
         try:
             result_json_dict = dict(json.loads(result_json_raw))
         except JSONDecodeError:
             return ErrorResponse(
                 message=f"Failed to parse result {request.result_identifier} for "
-                        f"given detector {matching_detector_resolution.detector_serial_identifier} "
-                        f"and resolution {str(matching_detector_resolution.image_resolution)}.")
+                        f"given resolution {str(matching_image_resolution)}.")
         intrinsic_calibration: IntrinsicCalibration = IntrinsicCalibration(**result_json_dict)
         return CalibrationResultGetResponse(intrinsic_calibration=intrinsic_calibration)
 
     def list_calibration_detector_resolutions(self, **_kwargs) -> CalibrationResolutionListResponse:
-        detector_resolutions: list[DetectorResolution] = list(self._calibration_map.keys())
-        return CalibrationResolutionListResponse(detector_resolutions=detector_resolutions)
+        resolutions: list[ImageResolution] = list(self._calibration_map.keys())
+        return CalibrationResolutionListResponse(resolutions=resolutions)
 
     # noinspection DuplicatedCode
     def list_calibration_image_metadata_list(self, **kwargs) -> CalibrationImageMetadataListResponse:
@@ -398,13 +386,10 @@ class Calibrator:
             kwargs=kwargs,
             key="request",
             arg_type=CalibrationImageMetadataListRequest)
-        calibration_map_key: DetectorResolution = DetectorResolution(
-            detector_serial_identifier=request.detector_serial_identifier,
-            image_resolution=request.image_resolution)
+        map_key: ImageResolution = request.image_resolution
         image_metadata_list: list[CalibrationImageMetadata] = list()
-        if calibration_map_key in self._calibration_map:
-            image_metadata_list = [image
-                                   for image in self._calibration_map[calibration_map_key].image_metadata_list]
+        if map_key in self._calibration_map:
+            image_metadata_list = [image for image in self._calibration_map[map_key].image_metadata_list]
         return CalibrationImageMetadataListResponse(metadata_list=image_metadata_list)
 
     # noinspection DuplicatedCode
@@ -413,13 +398,10 @@ class Calibrator:
             kwargs=kwargs,
             key="request",
             arg_type=CalibrationResultMetadataListRequest)
-        calibration_map_key: DetectorResolution = DetectorResolution(
-            detector_serial_identifier=request.detector_serial_identifier,
-            image_resolution=request.image_resolution)
+        map_key: ImageResolution = request.image_resolution
         result_metadata_list: list[CalibrationResultMetadata] = list()
-        if calibration_map_key in self._calibration_map:
-            result_metadata_list = [result
-                                    for result in self._calibration_map[calibration_map_key].result_metadata_list]
+        if map_key in self._calibration_map:
+            result_metadata_list = [result for result in self._calibration_map[map_key].result_metadata_list]
         return CalibrationResultMetadataListResponse(metadata_list=result_metadata_list)
 
     # noinspection DuplicatedCode
@@ -429,8 +411,8 @@ class Calibrator:
             key="request",
             arg_type=CalibrationImageMetadataUpdateRequest)
         found_count: int = 0
-        for calibration_map_key in self._calibration_map:
-            for image in self._calibration_map[calibration_map_key].image_metadata_list:
+        for map_key in self._calibration_map:
+            for image in self._calibration_map[map_key].image_metadata_list:
                 if image.identifier == request.image_identifier:
                     image.state = request.image_state
                     image.label = request.image_label
@@ -453,8 +435,8 @@ class Calibrator:
             key="request",
             arg_type=CalibrationResultMetadataUpdateRequest)
         found_count: int = 0
-        for calibration_map_key in self._calibration_map:
-            for result in self._calibration_map[calibration_map_key].result_metadata_list:
+        for map_key in self._calibration_map:
+            for result in self._calibration_map[map_key].result_metadata_list:
                 if result.identifier == request.result_identifier:
                     result.state = request.result_state
                     found_count += 1
@@ -471,20 +453,20 @@ class Calibrator:
 
     def _filepath_for_calibration_image(
         self,
-        calibration_map_key: DetectorResolution,
+        map_key: ImageResolution,
         image_identifier: str
     ) -> str:
-        key_path: str = self._path_for_map_key(calibration_map_key=calibration_map_key)
+        key_path: str = self._path_for_map_key(map_key=map_key)
         return os.path.join(
             key_path,
             image_identifier + Calibrator.IMAGE_FORMAT)
 
     def _filepath_for_calibration_result(
         self,
-        calibration_map_key: DetectorResolution,
+        map_key: ImageResolution,
         result_identifier: str
     ) -> str:
-        key_path: str = self._path_for_map_key(calibration_map_key=calibration_map_key)
+        key_path: str = self._path_for_map_key(map_key=map_key)
         return os.path.join(
             key_path,
             result_identifier + Calibrator.RESULT_FORMAT)
@@ -507,13 +489,9 @@ class Calibrator:
 
     def _path_for_map_key(
         self,
-        calibration_map_key: DetectorResolution
+        map_key: ImageResolution
     ) -> str:
-        return os.path.join(
-            self._configuration.data_path,
-            str(DetectorResolution(
-                detector_serial_identifier=calibration_map_key.detector_serial_identifier,
-                image_resolution=calibration_map_key.image_resolution)))
+        return os.path.join(self._configuration.data_path, str(map_key))
 
     def _exists(
         self,

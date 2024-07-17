@@ -1,7 +1,7 @@
-from enum import IntEnum
+from enum import StrEnum
 from typing import Final
 
 
-class CalibrationResultState(IntEnum):
-    RETAIN: Final[int] = 0
-    DELETE: Final[int] = -1  # stage for deletion
+class CalibrationResultState(StrEnum):
+    RETAIN: Final[int] = "retain"
+    DELETE: Final[int] = "delete"  # stage for deletion

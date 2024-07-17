@@ -14,7 +14,6 @@ from .corner_refinement import \
     CORNER_REFINEMENT_METHOD_DICTIONARY_TEXT_TO_INT
 from .detector_frame import DetectorFrame
 from .detection_parameters import DetectionParameters
-from .detector_resolution import DetectorResolution
 from .image_resolution import ImageResolution
 from .intrinsic_calibration import \
     IntrinsicCalibration, \

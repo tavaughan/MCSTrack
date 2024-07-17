@@ -1,8 +1,8 @@
-from enum import IntEnum
+from enum import StrEnum
 from typing import Final
 
 
-class CalibrationImageState(IntEnum):
-    IGNORE: Final[int] = 0
-    SELECT: Final[int] = 1
-    DELETE: Final[int] = -1  # stage for deletion
+class CalibrationImageState(StrEnum):
+    IGNORE: Final[int] = "ignore"
+    SELECT: Final[int] = "select"
+    DELETE: Final[int] = "delete"  # stage for deletion

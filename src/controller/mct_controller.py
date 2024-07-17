@@ -19,7 +19,6 @@ from src.common.structures import \
     COMPONENT_ROLE_LABEL_DETECTOR, \
     COMPONENT_ROLE_LABEL_POSE_SOLVER, \
     DetectorFrame, \
-    DetectorResolution, \
     ImageResolution, \
     IntrinsicParameters, \
     PoseSolverFrame
@@ -146,16 +145,13 @@ class MCTController(MCTComponent):
                         message=f"DetectorConnection with label {detector_label} doesn't have a resolution.")
                     continue
                 requests: list[MCTRequest] = list()
-                target_resolution: DetectorResolution = DetectorResolution(
-                    detector_serial_identifier=detector_label,
-                    image_resolution=detector_connection.current_resolution)
                 found_target_resolution: bool = False
                 for detector_resolution in detector_connection.calibrated_resolutions:
-                    if detector_resolution == target_resolution:
+                    if detector_resolution == detector_connection.current_resolution:
                         requests.append(
                             CalibrationResultMetadataListRequest(
                                 detector_serial_identifier=detector_label,
-                                image_resolution=target_resolution.image_resolution))
+                                image_resolution=detector_connection.current_resolution))
                         found_target_resolution = True
                 if not found_target_resolution:
                     self.status_message_source.enqueue_status_message(
@@ -429,7 +425,7 @@ class MCTController(MCTComponent):
                 severity="error",
                 message=f"Failed to find DetectorConnection with label {detector_label}.")
             return
-        detector_connection.calibrated_resolutions = response.detector_resolutions
+        detector_connection.calibrated_resolutions = response.resolutions
 
     def handle_response_list_calibration_result_metadata(
         self,

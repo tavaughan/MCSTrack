@@ -18,7 +18,6 @@ from src.common import \
     MCTResponseSeries, \
     StatusMessageSource
 from src.common.structures import \
-    DetectorResolution, \
     ImageResolution
 from src.controller import \
     MCTController
@@ -366,16 +365,7 @@ class CalibratorPanel(BasePanel):
         self,
         response: CalibrationResolutionListResponse
     ) -> None:
-        self._detector_resolutions = list()
-        detector_resolution: DetectorResolution
-        for detector_resolution in response.detector_resolutions:
-            detector_serial_identifier: str = detector_resolution.detector_serial_identifier
-            if detector_serial_identifier != self._detector_selector.selector.GetStringSelection():
-                continue
-            image_resolution: ImageResolution = detector_resolution.image_resolution
-            self._detector_resolutions.append(image_resolution)
-        self._detector_resolutions = sorted(self._detector_resolutions)
-
+        self._detector_resolutions = sorted(response.resolutions)
         self._detector_resolution_selector.set_options([str(res) for res in self._detector_resolutions])
         self._update_ui_controls()
 

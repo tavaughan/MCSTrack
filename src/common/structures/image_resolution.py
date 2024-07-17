@@ -5,8 +5,15 @@ class ImageResolution(BaseModel):
     x_px: int = Field()
     y_px: int = Field()
 
-    def __str__(self):
-        return f"{self.x_px}x{self.y_px}"
+    def __eq__(self, other) -> bool:
+        if type(self) is not type(other):
+            return False
+        return \
+            self.x_px == other.x_px and \
+            self.y_px == other.y_px
+
+    def __hash__(self) -> int:
+        return hash(str(self))
 
     def __lt__(self, other):
         if not isinstance(other, ImageResolution):
@@ -19,6 +26,9 @@ class ImageResolution(BaseModel):
             return True
         else:
             return False
+
+    def __str__(self):
+        return f"{self.x_px}x{self.y_px}"
 
     @staticmethod
     def from_str(in_str: str) -> 'ImageResolution':

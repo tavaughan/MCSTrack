@@ -8,7 +8,6 @@ from src.common.api import \
     MCTResponse, \
     MCTResponseSeries
 from src.common.structures import \
-    DetectorResolution, \
     ImageResolution, \
     IntrinsicParameters, \
     MarkerSnapshot
@@ -35,7 +34,7 @@ class DetectorConnection(Connection):
     # These are variables used directly by the MCTController for storing data
     request_id: uuid.UUID | None
     calibration_result_identifier: str | None
-    calibrated_resolutions: list[DetectorResolution] | None
+    calibrated_resolutions: list[ImageResolution] | None
     current_resolution: ImageResolution | None
     current_intrinsic_parameters: IntrinsicParameters | None
     detected_marker_snapshots: list[MarkerSnapshot]

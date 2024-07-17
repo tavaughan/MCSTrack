@@ -89,26 +89,26 @@ class Detector(MCTComponent):
         return_value: dict[type[MCTRequest], Callable[[dict], MCTResponse]] = super().supported_request_types()
         return_value.update({
 
-            # Detector Requests
-            CameraImageGetRequest: self.get_capture_image,
-            CameraParametersGetRequest: self.get_capture_properties,
-            MarkerParametersGetRequest: self.get_detection_parameters,
             DetectorFrameGetRequest: self.get_marker_snapshots,
-            CameraParametersSetRequest: self.set_capture_properties,
-            MarkerParametersSetRequest: self.set_detection_parameters,
             DetectorStartRequest: self.start_capture,
             DetectorStopRequest: self.stop_capture,
 
-            # Calibrator Requests
-            CalibrationImageAddRequest: self._calibrator.add_calibration_image,
+            CameraImageGetRequest: self.get_capture_image,
+            CameraParametersGetRequest: self.get_capture_properties,
+            CameraParametersSetRequest: self.set_capture_properties,
+
+            MarkerParametersGetRequest: self.get_detection_parameters,
+            MarkerParametersSetRequest: self.set_detection_parameters,
+
             CalibrationCalculateRequest: self._calibrator.calibrate,
             CalibrationDeleteStagedRequest: self._calibrator.delete_staged,
+            CalibrationImageAddRequest: self._calibrator.add_calibration_image,
             CalibrationImageGetRequest: self._calibrator.get_calibration_image,
-            CalibrationResultGetRequest: self._calibrator.get_calibration_result,
-            CalibrationResolutionListRequest: self._calibrator.list_calibration_detector_resolutions,
             CalibrationImageMetadataListRequest: self._calibrator.list_calibration_image_metadata_list,
-            CalibrationResultMetadataListRequest: self._calibrator.list_calibration_result_metadata_list,
             CalibrationImageMetadataUpdateRequest: self._calibrator.update_calibration_image_metadata,
+            CalibrationResolutionListRequest: self._calibrator.list_calibration_detector_resolutions,
+            CalibrationResultGetRequest: self._calibrator.get_calibration_result,
+            CalibrationResultMetadataListRequest: self._calibrator.list_calibration_result_metadata_list,
             CalibrationResultMetadataUpdateRequest: self._calibrator.update_calibration_result_metadata})
         return return_value
     

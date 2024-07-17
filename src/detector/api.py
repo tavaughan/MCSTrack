@@ -4,9 +4,7 @@ from src.common import \
 from src.common.structures import \
     CaptureFormat, \
     DetectionParameters, \
-    DetectorResolution, \
     IntrinsicCalibration, \
-    IntrinsicParameters, \
     ImageResolution, \
     KeyValueMetaAny, \
     KeyValueSimpleAny, \
@@ -133,7 +131,7 @@ class CalibrationResolutionListResponse(MCTResponse):
         return "detector_calibration_detector_resolutions_list"
 
     parsable_type: str = Field(default=parsable_type_identifier(), const=True)
-    detector_resolutions: list[DetectorResolution] = Field()
+    resolutions: list[ImageResolution] = Field()
 
 
 class CalibrationResultGetRequest(MCTRequest):
