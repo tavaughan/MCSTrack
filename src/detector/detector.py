@@ -66,7 +66,8 @@ class Detector(MCTComponent):
         
         self._detector_configuration = detector_configuration
         self._calibrator = Calibrator(
-            calibrator_configuration=detector_configuration.calibrator_configuration)
+            configuration=detector_configuration.calibrator_configuration,
+            status_message_source=self.get_status_message_source())
         self._frame_count = 0
 
         self._camera_interface = camera_interface

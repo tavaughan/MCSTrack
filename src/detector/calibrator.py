@@ -28,8 +28,7 @@ from src.common import \
     ErrorResponse, \
     get_kwarg, \
     ImageCoding, \
-    MCTRequest, \
-    MCTResponse
+    StatusMessageSource
 from src.common.structures import \
     ImageResolution, \
     IntrinsicCalibration, \
@@ -47,7 +46,7 @@ import logging
 import numpy
 import os
 from pydantic import ValidationError
-from typing import Callable, Final
+from typing import Final
 import uuid
 
 
@@ -58,6 +57,7 @@ class Calibrator:
 
     _configuration: CalibratorConfiguration
     _calibration_map: dict[ImageResolution, CalibrationMapValue]
+    _status_message_source: StatusMessageSource
 
     CALIBRATION_MAP_FILENAME: Final[str] = "calibration_map.json"
 
@@ -66,11 +66,15 @@ class Calibrator:
 
     def __init__(
         self,
-        calibrator_configuration: CalibratorConfiguration
+        configuration: CalibratorConfiguration,
+        status_message_source: StatusMessageSource
     ):
-        self._configuration = calibrator_configuration
+        self._configuration = configuration
+        self._status_message_source = status_message_source
         if not self._exists(path=self._configuration.data_path, pathtype="path", create_path=True):
-            self.add_status_message(severity="critical", message="Data path does not exist and could not be created.")
+            self._status_message_source.enqueue_status_message(
+                severity="critical",
+                message="Data path does not exist and could not be created.")
             detailed_message: str = f"{self._configuration.data_path} does not exist and could not be created."
             logger.critical(detailed_message)
             raise RuntimeError(detailed_message)
@@ -79,12 +83,8 @@ class Calibrator:
                            "In order to avoid data loss, the software will now abort. " \
                            "Please manually correct or remove the file in the filesystem."
             logger.critical(message)
-            self.add_status_message(severity="critical", message=message)
+            self._status_message_source.enqueue_status_message(severity="critical", message=message)
             raise RuntimeError(message)
-
-    def supported_request_types(self) -> dict[type[MCTRequest], Callable[[dict], MCTResponse]]:
-        return_value: dict[type[MCTRequest], Callable[[dict], MCTResponse]] = super().supported_request_types()
-        return return_value
 
     def add_calibration_image(self, **kwargs) -> CalibrationImageAddResponse | ErrorResponse:
         request: CalibrationImageAddRequest = get_kwarg(
@@ -149,7 +149,7 @@ class Calibrator:
                 map_key=calibration_key,
                 image_identifier=image_metadata.identifier)
             if not self._exists(path=image_filepath, pathtype="filepath"):
-                self.add_status_message(
+                self._status_message_source.enqueue_status_message(
                     severity="warning",
                     message=f"Image {image_metadata.identifier} was not found. "
                             f"It will be omitted from the calibration.")
@@ -161,7 +161,7 @@ class Calibrator:
                 dictionary=charuco_spec.aruco_dictionary(),
                 parameters=aruco_detector_parameters)
             if len(marker_corners) <= 0:
-                self.add_status_message(
+                self._status_message_source.enqueue_status_message(
                     severity="warning",
                     message=f"Image {image_metadata.identifier} did not appear to contain any identifiable markers. "
                             f"It will be omitted from the calibration.")
@@ -207,6 +207,7 @@ class Calibrator:
         #  Note: OpenCV documentation specifies the order of distortion coefficients
         #  https://docs.opencv.org/4.x/d9/d6a/group__aruco.html#ga366993d29fdddd995fba8c2e6ca811ea
         #  So far I have not seen calibration return a number of coefficients other than 5.
+        #  Note too that there is an unchecked expectation that radial distortion be monotonic.
 
         intrinsic_calibration: IntrinsicCalibration = IntrinsicCalibration(
             timestamp_utc=str(datetime.datetime.utcnow()),
@@ -255,7 +256,9 @@ class Calibrator:
         IOUtils.json_write(
             filepath=result_filepath,
             json_dict=intrinsic_calibration.dict(),
-            on_error_for_user=lambda msg: self.add_status_message(severity="error", message=msg),
+            on_error_for_user=lambda msg: self._status_message_source.enqueue_status_message(
+                severity="error",
+                message=msg),
             on_error_for_dev=logger.error,
             ignore_none=True)
         result_metadata: CalibrationResultMetadata = CalibrationResultMetadata(
@@ -422,7 +425,7 @@ class Calibrator:
             return ErrorResponse(
                 message=f"Image identifier {request.image_identifier} is not associated with any image.")
         elif found_count > 1:
-            self.add_status_message(
+            self._status_message_source.enqueue_status_message(
                 severity="warning",
                 message=f"Image identifier {request.image_identifier} is associated with multiple images.")
         self._calibration_map_save()
@@ -445,7 +448,7 @@ class Calibrator:
             return ErrorResponse(
                 message=f"Result identifier {request.result_identifier} is not associated with any result.")
         elif found_count > 1:
-            self.add_status_message(
+            self._status_message_source.enqueue_status_message(
                 severity="warning",
                 message=f"Result identifier {request.result_identifier} is associated with multiple results.")
         self._calibration_map_save()
@@ -476,13 +479,13 @@ class Calibrator:
             os.remove(filepath)
         except FileNotFoundError as e:
             logger.error(e)
-            self.add_status_message(
+            self._status_message_source.enqueue_status_message(
                 severity="warning",  # It *is* an internal error, but it has few consequences for user... so warning
                 message=f"Failed to remove a file from the calibrator because it does not exist. "
                         f"See its internal log for details.")
         except OSError as e:
             logger.error(e)
-            self.add_status_message(
+            self._status_message_source.enqueue_status_message(
                 severity="warning",  # It *is* an internal error, but it has few consequences for user... so warning
                 message=f"Failed to remove a file from the calibrator due to an unexpected reason. "
                         f"See its internal log for details.")
@@ -503,7 +506,9 @@ class Calibrator:
             path=path,
             pathtype=pathtype,
             create_path=create_path,
-            on_error_for_user=lambda msg: self.add_status_message(severity="error", message=msg),
+            on_error_for_user=lambda msg: self._status_message_source.enqueue_status_message(
+                severity="error",
+                message=msg),
             on_error_for_dev=logger.error)
 
     def _calibration_map_filepath(self) -> str:
@@ -519,7 +524,7 @@ class Calibrator:
             return True
         elif not os.path.isfile(calibration_map_filepath):
             logger.critical(f"Calibration map file location {calibration_map_filepath} exists but is not a file.")
-            self.add_status_message(
+            self._status_message_source.enqueue_status_message(
                 severity="critical",
                 message="Filepath location for calibration map exists but is not a file. "
                         "Most likely a directory exists at that location, "
@@ -527,11 +532,13 @@ class Calibrator:
             return False
         json_dict: dict = IOUtils.hjson_read(
             filepath=calibration_map_filepath,
-            on_error_for_user=lambda msg: self.add_status_message(severity="error", message=msg),
+            on_error_for_user=lambda msg: self._status_message_source.enqueue_status_message(
+                severity="error",
+                message=msg),
             on_error_for_dev=logger.error)
         if not json_dict:
             logger.error(f"Failed to load calibration map from file {calibration_map_filepath}.")
-            self.add_status_message(
+            self._status_message_source.enqueue_status_message(
                 severity="error",
                 message="Failed to load calibration map from file.")
             return False
@@ -540,7 +547,7 @@ class Calibrator:
             calibration_map = CalibrationMap(**json_dict)
         except ValidationError as e:
             logger.error(e)
-            self.add_status_message(
+            self._status_message_source.enqueue_status_message(
                 severity="error",
                 message="Failed to parse calibration map from file.")
             return False
@@ -551,5 +558,7 @@ class Calibrator:
         IOUtils.json_write(
             filepath=self._calibration_map_filepath(),
             json_dict=CalibrationMap.from_dict(self._calibration_map).dict(),
-            on_error_for_user=lambda msg: self.add_status_message(severity="error", message=msg),
+            on_error_for_user=lambda msg: self._status_message_source.enqueue_status_message(
+                severity="error",
+                message=msg),
             on_error_for_dev=logger.error)

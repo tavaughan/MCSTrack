@@ -85,6 +85,9 @@ class MCTComponent(abc.ABC):
         return DequeueStatusMessagesResponse(
             status_messages=status_messages)
 
+    def get_status_message_source(self):
+        return self._status_message_source
+
     @abc.abstractmethod
     def supported_request_types(self) -> dict[type[MCTRequest], Callable[[dict], MCTResponse]]:
         """
