@@ -1,6 +1,6 @@
 from ..api import \
-    GetCameraParametersResponse, \
-    SetCameraParametersRequest
+    CameraParametersGetResponse, \
+    CameraParametersSetRequest
 from ..exceptions import UpdateCaptureError
 from ..interfaces import AbstractCameraInterface
 from src.common import \
@@ -126,10 +126,10 @@ class USBWebcamWithOpenCV(AbstractCameraInterface):
         :key request: SetCapturePropertiesRequest
         """
 
-        request: SetCameraParametersRequest = get_kwarg(
+        request: CameraParametersSetRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=SetCameraParametersRequest)
+            arg_type=CameraParametersSetRequest)
 
         if self._capture is None:
             return ErrorResponse(message="Capture is None.")
@@ -193,7 +193,7 @@ class USBWebcamWithOpenCV(AbstractCameraInterface):
 
         return EmptyResponse()
 
-    def get_capture_properties(self, **_kwargs) -> GetCameraParametersResponse | ErrorResponse:
+    def get_capture_properties(self, **_kwargs) -> CameraParametersGetResponse | ErrorResponse:
         if self._capture is None:
             return ErrorResponse(
                 message="The capture is not active, and properties cannot be retrieved.")
@@ -257,7 +257,7 @@ class USBWebcamWithOpenCV(AbstractCameraInterface):
             range_minimum=_CAMERA_GAMMA_RANGE_MINIMUM,
             range_maximum=_CAMERA_GAMMA_RANGE_MAXIMUM))
 
-        return GetCameraParametersResponse(parameters=key_values)
+        return CameraParametersGetResponse(parameters=key_values)
 
     def start_capture(self, **kwargs) -> MCTResponse:
         if isinstance(self._capture_device_id, str) and self._capture_device_id.isnumeric():

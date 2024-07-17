@@ -1,19 +1,19 @@
 from .api import \
-    AddCalibrationImageRequest, \
-    AddCalibrationImageResponse, \
-    CalibrateRequest, \
-    CalibrateResponse, \
-    GetCalibrationImageRequest, \
-    GetCalibrationImageResponse, \
-    GetCalibrationResultRequest, \
-    GetCalibrationResultResponse, \
-    ListCalibrationDetectorResolutionsResponse, \
-    ListCalibrationImageMetadataRequest, \
-    ListCalibrationImageMetadataResponse, \
-    ListCalibrationResultMetadataRequest, \
-    ListCalibrationResultMetadataResponse, \
-    UpdateCalibrationImageMetadataRequest, \
-    UpdateCalibrationResultMetadataRequest
+    CalibrationCalculateRequest, \
+    CalibrationCalculateResponse, \
+    CalibrationImageAddRequest, \
+    CalibrationImageAddResponse, \
+    CalibrationImageGetRequest, \
+    CalibrationImageGetResponse, \
+    CalibrationImageMetadataListRequest, \
+    CalibrationImageMetadataListResponse, \
+    CalibrationImageMetadataUpdateRequest, \
+    CalibrationResolutionListResponse, \
+    CalibrationResultGetRequest, \
+    CalibrationResultGetResponse, \
+    CalibrationResultMetadataListRequest, \
+    CalibrationResultMetadataListResponse, \
+    CalibrationResultMetadataUpdateRequest
 from .structures import \
     CalibratorConfiguration, \
     CalibrationImageMetadata, \
@@ -87,8 +87,8 @@ class Calibrator:
         return_value: dict[type[MCTRequest], Callable[[dict], MCTResponse]] = super().supported_request_types()
         return return_value
 
-    def add_calibration_image(self, **kwargs) -> AddCalibrationImageResponse | ErrorResponse:
-        request: AddCalibrationImageRequest = get_kwarg(
+    def add_calibration_image(self, **kwargs) -> CalibrationImageAddResponse | ErrorResponse:
+        request: CalibrationImageAddRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
             arg_type=object)
@@ -119,13 +119,13 @@ class Calibrator:
         with (open(image_filepath, 'wb') as in_file):
             in_file.write(image_bytes)
         self._calibration_map_save()
-        return AddCalibrationImageResponse(image_identifier=image_identifier)
+        return CalibrationImageAddResponse(image_identifier=image_identifier)
 
-    def calibrate(self, **kwargs) -> CalibrateResponse | ErrorResponse:
-        request: CalibrateRequest = get_kwarg(
+    def calibrate(self, **kwargs) -> CalibrationCalculateResponse | ErrorResponse:
+        request: CalibrationCalculateRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=CalibrateRequest)
+            arg_type=CalibrationCalculateRequest)
 
         calibration_key: DetectorResolution = DetectorResolution(
             detector_serial_identifier=request.detector_serial_identifier,
@@ -270,7 +270,7 @@ class Calibrator:
             image_identifiers=image_identifiers)
         self._calibration_map[calibration_key].result_metadata_list.append(result_metadata)
         self._calibration_map_save()
-        return CalibrateResponse(
+        return CalibrationCalculateResponse(
             result_identifier=result_identifier,
             intrinsic_calibration=intrinsic_calibration)
 
@@ -299,11 +299,11 @@ class Calibrator:
         return EmptyResponse()
 
     # noinspection DuplicatedCode
-    def get_calibration_image(self, **kwargs) -> GetCalibrationImageResponse | ErrorResponse:
-        request: GetCalibrationImageRequest = get_kwarg(
+    def get_calibration_image(self, **kwargs) -> CalibrationImageGetResponse | ErrorResponse:
+        request: CalibrationImageGetRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=GetCalibrationImageRequest)
+            arg_type=CalibrationImageGetRequest)
         found_count: int = 0
         matching_detector_resolution: DetectorResolution | None = None
         for detector_resolution in self._calibration_map:
@@ -337,14 +337,14 @@ class Calibrator:
                         f"given detector {matching_detector_resolution.detector_serial_identifier} "
                         f"and resolution {str(matching_detector_resolution.image_resolution)}.")
         image_base64 = ImageCoding.bytes_to_base64(image_bytes=image_bytes)
-        return GetCalibrationImageResponse(image_base64=image_base64)
+        return CalibrationImageGetResponse(image_base64=image_base64)
 
     # noinspection DuplicatedCode
-    def get_calibration_result(self, **kwargs) -> GetCalibrationResultResponse | ErrorResponse:
-        request: GetCalibrationResultRequest = get_kwarg(
+    def get_calibration_result(self, **kwargs) -> CalibrationResultGetResponse | ErrorResponse:
+        request: CalibrationResultGetRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=GetCalibrationResultRequest)
+            arg_type=CalibrationResultGetRequest)
         found_count: int = 0
         matching_detector_resolution: DetectorResolution | None = None
         for detector_resolution in self._calibration_map:
@@ -386,18 +386,18 @@ class Calibrator:
                         f"given detector {matching_detector_resolution.detector_serial_identifier} "
                         f"and resolution {str(matching_detector_resolution.image_resolution)}.")
         intrinsic_calibration: IntrinsicCalibration = IntrinsicCalibration(**result_json_dict)
-        return GetCalibrationResultResponse(intrinsic_calibration=intrinsic_calibration)
+        return CalibrationResultGetResponse(intrinsic_calibration=intrinsic_calibration)
 
-    def list_calibration_detector_resolutions(self, **_kwargs) -> ListCalibrationDetectorResolutionsResponse:
+    def list_calibration_detector_resolutions(self, **_kwargs) -> CalibrationResolutionListResponse:
         detector_resolutions: list[DetectorResolution] = list(self._calibration_map.keys())
-        return ListCalibrationDetectorResolutionsResponse(detector_resolutions=detector_resolutions)
+        return CalibrationResolutionListResponse(detector_resolutions=detector_resolutions)
 
     # noinspection DuplicatedCode
-    def list_calibration_image_metadata_list(self, **kwargs) -> ListCalibrationImageMetadataResponse:
-        request: ListCalibrationImageMetadataRequest = get_kwarg(
+    def list_calibration_image_metadata_list(self, **kwargs) -> CalibrationImageMetadataListResponse:
+        request: CalibrationImageMetadataListRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=ListCalibrationImageMetadataRequest)
+            arg_type=CalibrationImageMetadataListRequest)
         calibration_map_key: DetectorResolution = DetectorResolution(
             detector_serial_identifier=request.detector_serial_identifier,
             image_resolution=request.image_resolution)
@@ -405,14 +405,14 @@ class Calibrator:
         if calibration_map_key in self._calibration_map:
             image_metadata_list = [image
                                    for image in self._calibration_map[calibration_map_key].image_metadata_list]
-        return ListCalibrationImageMetadataResponse(metadata_list=image_metadata_list)
+        return CalibrationImageMetadataListResponse(metadata_list=image_metadata_list)
 
     # noinspection DuplicatedCode
-    def list_calibration_result_metadata_list(self, **kwargs) -> ListCalibrationResultMetadataResponse:
-        request: ListCalibrationResultMetadataRequest = get_kwarg(
+    def list_calibration_result_metadata_list(self, **kwargs) -> CalibrationResultMetadataListResponse:
+        request: CalibrationResultMetadataListRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=ListCalibrationResultMetadataRequest)
+            arg_type=CalibrationResultMetadataListRequest)
         calibration_map_key: DetectorResolution = DetectorResolution(
             detector_serial_identifier=request.detector_serial_identifier,
             image_resolution=request.image_resolution)
@@ -420,14 +420,14 @@ class Calibrator:
         if calibration_map_key in self._calibration_map:
             result_metadata_list = [result
                                     for result in self._calibration_map[calibration_map_key].result_metadata_list]
-        return ListCalibrationResultMetadataResponse(metadata_list=result_metadata_list)
+        return CalibrationResultMetadataListResponse(metadata_list=result_metadata_list)
 
     # noinspection DuplicatedCode
     def update_calibration_image_metadata(self, **kwargs) -> EmptyResponse | ErrorResponse:
-        request: UpdateCalibrationImageMetadataRequest = get_kwarg(
+        request: CalibrationImageMetadataUpdateRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=UpdateCalibrationImageMetadataRequest)
+            arg_type=CalibrationImageMetadataUpdateRequest)
         found_count: int = 0
         for calibration_map_key in self._calibration_map:
             for image in self._calibration_map[calibration_map_key].image_metadata_list:
@@ -448,10 +448,10 @@ class Calibrator:
 
     # noinspection DuplicatedCode
     def update_calibration_result_metadata(self, **kwargs) -> EmptyResponse | ErrorResponse:
-        request: UpdateCalibrationResultMetadataRequest = get_kwarg(
+        request: CalibrationResultMetadataUpdateRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=UpdateCalibrationResultMetadataRequest)
+            arg_type=CalibrationResultMetadataUpdateRequest)
         found_count: int = 0
         for calibration_map_key in self._calibration_map:
             for result in self._calibration_map[calibration_map_key].result_metadata_list:

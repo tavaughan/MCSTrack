@@ -6,13 +6,13 @@ from src.detector import \
     Detector, \
     DetectorConfiguration
 from src.detector.api import \
-    GetCaptureImageRequest, \
-    GetCaptureImageResponse, \
-    GetCameraParametersResponse, \
-    GetDetectionParametersResponse, \
-    GetMarkerSnapshotsRequest, \
-    GetMarkerSnapshotsResponse, \
-    SetDetectionParametersRequest
+    CameraImageGetRequest, \
+    CameraImageGetResponse, \
+    CameraParametersGetResponse, \
+    DetectorFrameGetRequest, \
+    DetectorFrameGetResponse, \
+    MarkerParametersGetResponse, \
+    MarkerParametersSetRequest
 from src.detector.structures.detector_configuration import OPENCV, PICAMERA
 from src.detector.interfaces import \
     AbstractCameraInterface, \
@@ -69,33 +69,33 @@ def create_app() -> FastAPI:
         allow_headers=["*"])
 
     @detector_app.get("/get_capture_image")
-    async def get_capture_image() -> GetCaptureImageResponse:
-        result: GetCaptureImageResponse = detector.get_capture_image(
-            request=GetCaptureImageRequest(format=".png"))
+    async def get_capture_image() -> CameraImageGetResponse:
+        result: CameraImageGetResponse = detector.get_capture_image(
+            request=CameraImageGetRequest(format=".png"))
         image_bytes = base64.b64decode(result.image_base64)
         with open("test.png", "wb") as image_file:
             image_file.write(image_bytes)
         return result
 
     @detector_app.get("/get_capture_properties")
-    async def get_capture_properties() -> GetCameraParametersResponse:
-        result: GetCameraParametersResponse = detector.get_capture_properties()
+    async def get_capture_properties() -> CameraParametersGetResponse:
+        result: CameraParametersGetResponse = detector.get_capture_properties()
         return result
 
     @detector_app.get("/get_detection_parameters")
-    async def get_detection_parameters() -> GetDetectionParametersResponse | ErrorResponse:
+    async def get_detection_parameters() -> MarkerParametersGetResponse | ErrorResponse:
         return detector.get_detection_parameters()
 
     @detector_app.post("/get_marker_snapshots")
     async def get_marker_snapshots(
-        request: GetMarkerSnapshotsRequest
-    ) -> GetMarkerSnapshotsResponse:
+        request: DetectorFrameGetRequest
+    ) -> DetectorFrameGetResponse:
         return detector.get_marker_snapshots(
             request=request)
 
     @detector_app.post("/set_detection_parameters")
     async def set_detection_parameters(
-        request: SetDetectionParametersRequest
+        request: MarkerParametersSetRequest
     ) -> EmptyResponse | ErrorResponse:
         return detector.set_detection_parameters(
             request=request)

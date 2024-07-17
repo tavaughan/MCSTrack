@@ -1,6 +1,6 @@
 from ..api import \
-    GetDetectionParametersResponse, \
-    GetMarkerSnapshotsResponse
+    DetectorFrameGetResponse, \
+    MarkerParametersGetResponse
 from src.common import \
     EmptyResponse, \
     ErrorResponse
@@ -18,11 +18,11 @@ class AbstractMarkerInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_detection_parameters(self, **_kwargs) -> GetDetectionParametersResponse | ErrorResponse:
+    def get_detection_parameters(self, **_kwargs) -> MarkerParametersGetResponse | ErrorResponse:
         pass
 
     @abc.abstractmethod
-    def get_marker_snapshots(self, **kwargs) -> GetMarkerSnapshotsResponse:
+    def get_marker_snapshots(self, **kwargs) -> DetectorFrameGetResponse:
         pass
 
     @abc.abstractmethod

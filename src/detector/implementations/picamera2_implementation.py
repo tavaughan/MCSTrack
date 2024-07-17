@@ -1,6 +1,6 @@
 from ..api import \
-    GetCameraParametersResponse, \
-    SetCameraParametersRequest
+    CameraParametersGetResponse, \
+    CameraParametersSetRequest
 from ..exceptions import UpdateCaptureError
 from ..interfaces import AbstractCameraInterface
 from src.common import \
@@ -109,10 +109,10 @@ class PiCamera(AbstractCameraInterface):
         :key request: SetCapturePropertiesRequest
         """
 
-        request: SetCameraParametersRequest = get_kwarg(
+        request: CameraParametersSetRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=SetCameraParametersRequest)
+            arg_type=CameraParametersSetRequest)
 
         mismatched_keys: list[str] = list()
 
@@ -170,7 +170,7 @@ class PiCamera(AbstractCameraInterface):
 
         return EmptyResponse()
 
-    def get_capture_properties(self, **_kwargs) -> GetCameraParametersResponse | ErrorResponse:
+    def get_capture_properties(self, **_kwargs) -> CameraParametersGetResponse | ErrorResponse:
         if self._capture_status.status != CaptureStatus.Status.RUNNING:
             return ErrorResponse(
                 message="The capture is not active, and properties cannot be retrieved.")
@@ -231,7 +231,7 @@ class PiCamera(AbstractCameraInterface):
             range_maximum=_CAMERA_SHARPNESS_MAXIMUM,
             digit_count=_CAMERA_SHARPNESS_DIGIT_COUNT))
 
-        return GetCameraParametersResponse(parameters=key_values)
+        return CameraParametersGetResponse(parameters=key_values)
 
     def start_capture(self, **kwargs) -> MCTResponse:
 

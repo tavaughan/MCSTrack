@@ -24,16 +24,16 @@ from src.common.structures import \
     IntrinsicParameters, \
     PoseSolverFrame
 from src.detector.api import \
-    GetCalibrationResultRequest, \
-    GetCalibrationResultResponse, \
-    GetCameraParametersRequest, \
-    GetCameraParametersResponse, \
-    GetMarkerSnapshotsRequest, \
-    GetMarkerSnapshotsResponse, \
-    ListCalibrationDetectorResolutionsRequest, \
-    ListCalibrationDetectorResolutionsResponse, \
-    ListCalibrationResultMetadataRequest, \
-    ListCalibrationResultMetadataResponse
+    CalibrationResultGetRequest, \
+    CalibrationResultGetResponse, \
+    CameraParametersGetRequest, \
+    CameraParametersGetResponse, \
+    DetectorFrameGetRequest, \
+    DetectorFrameGetResponse, \
+    CalibrationResolutionListRequest, \
+    CalibrationResolutionListResponse, \
+    CalibrationResultMetadataListRequest, \
+    CalibrationResultMetadataListResponse
 from src.pose_solver.api import \
     AddTargetMarkerResponse, \
     AddMarkerCornersRequest, \
@@ -121,8 +121,8 @@ class MCTController(MCTComponent):
             for detector_label in detector_labels:
                 request_series: MCTRequestSeries = MCTRequestSeries(
                     series=[
-                        ListCalibrationDetectorResolutionsRequest(),
-                        GetCameraParametersRequest()])
+                        CalibrationResolutionListRequest(),
+                        CameraParametersGetRequest()])
                 self._pending_request_ids.append(self.request_series_push(
                     connection_label=detector_label,
                     request_series=request_series))
@@ -153,7 +153,7 @@ class MCTController(MCTComponent):
                 for detector_resolution in detector_connection.calibrated_resolutions:
                     if detector_resolution == target_resolution:
                         requests.append(
-                            ListCalibrationResultMetadataRequest(
+                            CalibrationResultMetadataListRequest(
                                 detector_serial_identifier=detector_label,
                                 image_resolution=target_resolution.image_resolution))
                         found_target_resolution = True
@@ -184,7 +184,7 @@ class MCTController(MCTComponent):
                 if detector_connection.calibration_result_identifier is not None:
                     request_series: MCTRequestSeries = MCTRequestSeries(
                         series=[
-                            GetCalibrationResultRequest(
+                            CalibrationResultGetRequest(
                                 result_identifier=detector_connection.calibration_result_identifier)])
                     self._pending_request_ids.append(self.request_series_push(
                         connection_label=detector_label,
@@ -342,7 +342,7 @@ class MCTController(MCTComponent):
 
     def handle_response_get_capture_properties(
         self,
-        response: GetCameraParametersResponse,
+        response: CameraParametersGetResponse,
         detector_label: str
     ) -> None:
         detector_connection: DetectorConnection = self._get_connection(
@@ -367,7 +367,7 @@ class MCTController(MCTComponent):
 
     def handle_response_get_calibration_result(
         self,
-        response: GetCalibrationResultResponse
+        response: CalibrationResultGetResponse
     ) -> None:
         detector_label: str = response.intrinsic_calibration.detector_serial_identifier
         detector_connection: DetectorConnection = self._get_connection(
@@ -382,7 +382,7 @@ class MCTController(MCTComponent):
 
     def handle_response_get_marker_snapshots(
         self,
-        response: GetMarkerSnapshotsResponse,
+        response: DetectorFrameGetResponse,
         detector_label: str
     ):
         detector_connection: DetectorConnection = self._get_connection(
@@ -418,7 +418,7 @@ class MCTController(MCTComponent):
 
     def handle_response_list_calibration_detector_resolutions(
         self,
-        response: ListCalibrationDetectorResolutionsResponse,
+        response: CalibrationResolutionListResponse,
         detector_label: str
     ) -> None:
         detector_connection: DetectorConnection = self._get_connection(
@@ -433,7 +433,7 @@ class MCTController(MCTComponent):
 
     def handle_response_list_calibration_result_metadata(
         self,
-        response: ListCalibrationResultMetadataResponse,
+        response: CalibrationResultMetadataListResponse,
         detector_label: str
     ) -> None:
         if len(response.metadata_list) <= 0:
@@ -494,15 +494,15 @@ class MCTController(MCTComponent):
         for response in response_series.series:
             if isinstance(response, AddTargetMarkerResponse):
                 success = True  # we don't currently do anything with this response in this interface
-            elif isinstance(response, GetCalibrationResultResponse):
+            elif isinstance(response, CalibrationResultGetResponse):
                 self.handle_response_get_calibration_result(response=response)
                 success = True
-            elif isinstance(response, GetCameraParametersResponse):
+            elif isinstance(response, CameraParametersGetResponse):
                 self.handle_response_get_capture_properties(
                     response=response,
                     detector_label=response_series.responder)
                 success = True
-            elif isinstance(response, GetMarkerSnapshotsResponse):
+            elif isinstance(response, DetectorFrameGetResponse):
                 self.handle_response_get_marker_snapshots(
                     response=response,
                     detector_label=response_series.responder)
@@ -511,12 +511,12 @@ class MCTController(MCTComponent):
                     response=response,
                     pose_solver_label=response_series.responder)
                 success = True
-            elif isinstance(response, ListCalibrationDetectorResolutionsResponse):
+            elif isinstance(response, CalibrationResolutionListResponse):
                 self.handle_response_list_calibration_detector_resolutions(
                     response=response,
                     detector_label=response_series.responder)
                 success = True
-            elif isinstance(response, ListCalibrationResultMetadataResponse):
+            elif isinstance(response, CalibrationResultMetadataListResponse):
                 self.handle_response_list_calibration_result_metadata(
                     response=response,
                     detector_label=response_series.responder)
@@ -657,7 +657,7 @@ class MCTController(MCTComponent):
                 if detector_connection.request_id is None:
                     detector_connection.request_id = self.request_series_push(
                         connection_label=detector_label,
-                        request_series=MCTRequestSeries(series=[GetMarkerSnapshotsRequest()]))
+                        request_series=MCTRequestSeries(series=[DetectorFrameGetRequest()]))
             for pose_solver_label in self.get_active_pose_solver_labels():
                 pose_solver_connection: PoseSolverConnection = self._get_connection(
                     connection_label=pose_solver_label,

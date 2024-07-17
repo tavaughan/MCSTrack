@@ -1,8 +1,8 @@
 from ..api import \
-    GetDetectionParametersResponse, \
-    GetMarkerSnapshotsRequest, \
-    GetMarkerSnapshotsResponse, \
-    SetDetectionParametersRequest
+    DetectorFrameGetRequest, \
+    DetectorFrameGetResponse, \
+    MarkerParametersGetResponse, \
+    MarkerParametersSetRequest
 from ..interfaces import AbstractMarkerInterface
 from src.common import \
     EmptyResponse, \
@@ -54,10 +54,10 @@ class ArucoMarker(AbstractMarkerInterface):
         :key request: SetDetectionParametersRequest
         """
 
-        request: SetDetectionParametersRequest = get_kwarg(
+        request: MarkerParametersSetRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=SetDetectionParametersRequest)
+            arg_type=MarkerParametersSetRequest)
 
         params: DetectionParameters = request.parameters
 
@@ -145,7 +145,7 @@ class ArucoMarker(AbstractMarkerInterface):
 
         return EmptyResponse()
 
-    def get_detection_parameters(self, **_kwargs) -> GetDetectionParametersResponse | ErrorResponse:
+    def get_detection_parameters(self, **_kwargs) -> MarkerParametersGetResponse | ErrorResponse:
         if self._marker_parameters.cornerRefinementMethod not in CORNER_REFINEMENT_METHOD_DICTIONARY_INT_TO_TEXT:
             return ErrorResponse(
                 message=f"Corner refinement method appears to be set to an invalid value: "
@@ -182,24 +182,24 @@ class ArucoMarker(AbstractMarkerInterface):
             perspective_remove_ignored_margin_per_cell=self._marker_parameters.perspectiveRemoveIgnoredMarginPerCell,
             perspective_remove_pixel_per_cell=self._marker_parameters.perspectiveRemovePixelPerCell,
             polygonal_approx_accuracy_rate=self._marker_parameters.polygonalApproxAccuracyRate)
-        return GetDetectionParametersResponse(parameters=params)
+        return MarkerParametersGetResponse(parameters=params)
 
-    def get_marker_snapshots(self, **kwargs) -> GetMarkerSnapshotsResponse:
+    def get_marker_snapshots(self, **kwargs) -> DetectorFrameGetResponse:
         """
         :key request: GetMarkerSnapshotsRequest
         """
 
-        request: GetMarkerSnapshotsRequest = get_kwarg(
+        request: DetectorFrameGetRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=GetMarkerSnapshotsRequest)
+            arg_type=DetectorFrameGetRequest)
 
         response_dict: dict = dict()
         if request.include_detected:
             response_dict["detected_marker_snapshots"] = self._marker_detected_snapshots
         if request.include_rejected:
             response_dict["rejected_marker_snapshots"] = self._marker_rejected_snapshots
-        return GetMarkerSnapshotsResponse(**response_dict)
+        return DetectorFrameGetResponse(**response_dict)
 
     def internal_update_marker_corners(self, captured_image) -> None:
         if self._marker_dictionary is None:

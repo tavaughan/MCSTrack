@@ -1,7 +1,7 @@
 from ..api import \
-    GetCameraParametersResponse, \
-    GetCaptureImageResponse, \
-    GetCaptureImageRequest
+    CameraImageGetResponse, \
+    CameraImageGetRequest, \
+    CameraParametersGetResponse
 from src.common import \
     EmptyResponse, \
     ErrorResponse, \
@@ -33,7 +33,7 @@ class AbstractCameraInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_capture_properties(self, **_kwargs) -> GetCameraParametersResponse | ErrorResponse:
+    def get_capture_properties(self, **_kwargs) -> CameraParametersGetResponse | ErrorResponse:
         pass
 
     @abc.abstractmethod
@@ -44,21 +44,21 @@ class AbstractCameraInterface(abc.ABC):
     def stop_capture(self, **kwargs) -> MCTResponse:
         pass
 
-    def get_capture_image(self, **kwargs) -> GetCaptureImageResponse | ErrorResponse:
+    def get_capture_image(self, **kwargs) -> CameraImageGetResponse | ErrorResponse:
         """
         :key request: GetCaptureImageRequest
         """
 
-        request: GetCaptureImageRequest = get_kwarg(
+        request: CameraImageGetRequest = get_kwarg(
             kwargs=kwargs,
             key="request",
-            arg_type=GetCaptureImageRequest)
+            arg_type=CameraImageGetRequest)
 
         encoded_frame: bool
         encoded_image_rgb_single_row: numpy.array
         encoded, encoded_image_rgb_single_row = cv2.imencode(request.format, self._captured_image)
         encoded_image_rgb_bytes: bytes = encoded_image_rgb_single_row.tobytes()
         encoded_image_rgb_base64 = base64.b64encode(encoded_image_rgb_bytes)
-        return GetCaptureImageResponse(
+        return CameraImageGetResponse(
             format=request.format,
             image_base64=encoded_image_rgb_base64)

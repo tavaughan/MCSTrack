@@ -37,18 +37,18 @@ from src.common.structures import \
 from src.controller import \
     MCTController
 from src.detector.api import \
-    AddCalibrationImageRequest, \
-    AddCalibrationImageResponse, \
-    GetCaptureImageRequest, \
-    GetCaptureImageResponse, \
-    GetCameraParametersRequest, \
-    GetCameraParametersResponse, \
-    GetDetectionParametersRequest, \
-    GetDetectionParametersResponse, \
-    GetMarkerSnapshotsRequest, \
-    GetMarkerSnapshotsResponse, \
-    SetCameraParametersRequest, \
-    SetDetectionParametersRequest
+    CalibrationImageAddRequest, \
+    CalibrationImageAddResponse, \
+    CameraImageGetRequest, \
+    CameraImageGetResponse, \
+    CameraParametersGetRequest, \
+    CameraParametersGetResponse, \
+    CameraParametersSetRequest, \
+    DetectorFrameGetRequest, \
+    DetectorFrameGetResponse, \
+    MarkerParametersGetRequest, \
+    MarkerParametersGetResponse, \
+    MarkerParametersSetRequest
 import cv2
 from io import BytesIO
 import logging
@@ -619,7 +619,7 @@ class DetectorPanel(BasePanel):
             return
         request_series: MCTRequestSeries = MCTRequestSeries(
             series=[
-                AddCalibrationImageRequest(
+                CalibrationImageAddRequest(
                     detector_serial_identifier=selected_detector_label,
                     format=_CAPTURE_FORMAT,
                     image_base64=self._live_image_base64)])
@@ -632,9 +632,9 @@ class DetectorPanel(BasePanel):
         selected_detector_label: str = self._detector_selector.selector.GetStringSelection()
         request_series: MCTRequestSeries = MCTRequestSeries(
             series=[
-                GetCaptureImageRequest(
+                CameraImageGetRequest(
                     format=_CAPTURE_FORMAT),
-                GetMarkerSnapshotsRequest(
+                DetectorFrameGetRequest(
                     detected_marker_snapshots=True,
                     rejected_marker_snapshots=True)])
         self._live_preview_request_id = self._controller.request_series_push(
@@ -644,7 +644,7 @@ class DetectorPanel(BasePanel):
     def begin_get_capture_parameters(self):
         selected_detector_label: str = self._detector_selector.selector.GetStringSelection()
         request_series: MCTRequestSeries = MCTRequestSeries(
-            series=[GetCameraParametersRequest()])
+            series=[CameraParametersGetRequest()])
         self._control_blocking_request_id = self._controller.request_series_push(
             connection_label=selected_detector_label,
             request_series=request_series)
@@ -674,8 +674,8 @@ class DetectorPanel(BasePanel):
                 value=parameter_ui.get_value()))
         request_series: MCTRequestSeries = MCTRequestSeries(
             series=[
-                SetCameraParametersRequest(parameters=key_values),
-                GetCameraParametersRequest()])  # sync
+                CameraParametersSetRequest(parameters=key_values),
+                CameraParametersGetRequest()])  # sync
         self._control_blocking_request_id = self._controller.request_series_push(
             connection_label=selected_detector_label,
             request_series=request_series)
@@ -717,8 +717,8 @@ class DetectorPanel(BasePanel):
             min_marker_length_ratio_original_img=self._detection_param_min_marker_length_ratio_orig.spinbox.GetValue(),
             min_side_length_canonical_img=self._detection_param_min_side_length_canonical_img.spinbox.GetValue())
         request_series: MCTRequestSeries = MCTRequestSeries(series=[
-            SetDetectionParametersRequest(parameters=params),
-            GetDetectionParametersRequest()])  # sync
+            MarkerParametersSetRequest(parameters=params),
+            MarkerParametersGetRequest()])  # sync
         self._control_blocking_request_id = self._controller.request_series_push(
             connection_label=selected_detector_label,
             request_series=request_series)
@@ -732,15 +732,15 @@ class DetectorPanel(BasePanel):
     ) -> None:
         response: MCTResponse
         for response in response_series.series:
-            if isinstance(response, AddCalibrationImageResponse):
+            if isinstance(response, CalibrationImageAddResponse):
                 self._handle_add_calibration_image_response(response=response)
-            elif isinstance(response, GetCameraParametersResponse):
+            elif isinstance(response, CameraParametersGetResponse):
                 self._handle_get_capture_parameters_response(response=response)
-            elif isinstance(response, GetDetectionParametersResponse):
+            elif isinstance(response, MarkerParametersGetResponse):
                 self._handle_get_detection_parameters_response(response=response)
-            elif isinstance(response, GetCaptureImageResponse):
+            elif isinstance(response, CameraImageGetResponse):
                 self._handle_capture_snapshot_response(response=response)
-            elif isinstance(response, GetMarkerSnapshotsResponse):
+            elif isinstance(response, DetectorFrameGetResponse):
                 self._handle_marker_snapshot_response(response=response)
             elif isinstance(response, ErrorResponse):
                 self.handle_error_response(response=response)
@@ -749,7 +749,7 @@ class DetectorPanel(BasePanel):
 
     def _handle_add_calibration_image_response(
         self,
-        response: AddCalibrationImageResponse
+        response: CalibrationImageAddResponse
     ):
         self.status_message_source.enqueue_status_message(
             severity="info",
@@ -757,7 +757,7 @@ class DetectorPanel(BasePanel):
 
     def _handle_capture_snapshot_response(
         self,
-        response: GetCaptureImageResponse
+        response: CameraImageGetResponse
     ):
         if self._preview_image_checkbox.checkbox.GetValue():
             self._live_image_base64 = response.image_base64
@@ -765,7 +765,7 @@ class DetectorPanel(BasePanel):
     # noinspection DuplicatedCode
     def _handle_get_capture_parameters_response(
         self,
-        response: GetCameraParametersResponse
+        response: CameraParametersGetResponse
     ):
         self._camera_parameter_uis.clear()
         self._camera_parameter_panel.Freeze()
@@ -816,7 +816,7 @@ class DetectorPanel(BasePanel):
     # noinspection DuplicatedCode
     def _handle_get_detection_parameters_response(
         self,
-        response: GetDetectionParametersResponse
+        response: MarkerParametersGetResponse
     ):
         params: DetectionParameters = response.parameters
         if params.adaptive_thresh_win_size_min is not None:
@@ -900,7 +900,7 @@ class DetectorPanel(BasePanel):
 
     def _handle_marker_snapshot_response(
         self,
-        response: GetMarkerSnapshotsResponse
+        response: DetectorFrameGetResponse
     ):
         self._live_markers_detected = response.detected_marker_snapshots
         self._live_markers_rejected = response.rejected_marker_snapshots

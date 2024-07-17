@@ -1,26 +1,26 @@
 from .api import \
-    AddCalibrationImageRequest, \
-    CalibrateRequest, \
-    DeleteStagedRequest, \
-    GetCalibrationImageRequest, \
-    GetCalibrationResultRequest, \
-    GetCameraParametersRequest, \
-    GetCameraParametersResponse, \
-    GetCaptureImageRequest, \
-    GetCaptureImageResponse, \
-    GetDetectionParametersRequest, \
-    GetDetectionParametersResponse, \
-    GetMarkerSnapshotsRequest, \
-    GetMarkerSnapshotsResponse, \
-    ListCalibrationDetectorResolutionsRequest, \
-    ListCalibrationImageMetadataRequest, \
-    ListCalibrationResultMetadataRequest, \
-    SetCameraParametersRequest, \
-    SetDetectionParametersRequest, \
-    StartCaptureRequest, \
-    StopCaptureRequest, \
-    UpdateCalibrationImageMetadataRequest, \
-    UpdateCalibrationResultMetadataRequest
+    CalibrationCalculateRequest, \
+    CalibrationDeleteStagedRequest, \
+    CalibrationImageAddRequest, \
+    CalibrationImageGetRequest, \
+    CalibrationImageMetadataListRequest, \
+    CalibrationImageMetadataUpdateRequest, \
+    CalibrationResultGetRequest, \
+    CalibrationResolutionListRequest, \
+    CalibrationResultMetadataListRequest, \
+    CalibrationResultMetadataUpdateRequest, \
+    CameraImageGetRequest, \
+    CameraImageGetResponse, \
+    CameraParametersGetRequest, \
+    CameraParametersGetResponse, \
+    CameraParametersSetRequest, \
+    DetectorFrameGetRequest, \
+    DetectorFrameGetResponse, \
+    DetectorStartRequest, \
+    DetectorStopRequest, \
+    MarkerParametersGetRequest, \
+    MarkerParametersGetResponse, \
+    MarkerParametersSetRequest
 from .calibrator import Calibrator
 from .exceptions import UpdateCaptureError
 from .interfaces import \
@@ -90,26 +90,26 @@ class Detector(MCTComponent):
         return_value.update({
 
             # Detector Requests
-            GetCaptureImageRequest: self.get_capture_image,
-            GetCameraParametersRequest: self.get_capture_properties,
-            GetDetectionParametersRequest: self.get_detection_parameters,
-            GetMarkerSnapshotsRequest: self.get_marker_snapshots,
-            SetCameraParametersRequest: self.set_capture_properties,
-            SetDetectionParametersRequest: self.set_detection_parameters,
-            StartCaptureRequest: self.start_capture,
-            StopCaptureRequest: self.stop_capture,
+            CameraImageGetRequest: self.get_capture_image,
+            CameraParametersGetRequest: self.get_capture_properties,
+            MarkerParametersGetRequest: self.get_detection_parameters,
+            DetectorFrameGetRequest: self.get_marker_snapshots,
+            CameraParametersSetRequest: self.set_capture_properties,
+            MarkerParametersSetRequest: self.set_detection_parameters,
+            DetectorStartRequest: self.start_capture,
+            DetectorStopRequest: self.stop_capture,
 
             # Calibrator Requests
-            AddCalibrationImageRequest: self._calibrator.add_calibration_image,
-            CalibrateRequest: self._calibrator.calibrate,
-            DeleteStagedRequest: self._calibrator.delete_staged,
-            GetCalibrationImageRequest: self._calibrator.get_calibration_image,
-            GetCalibrationResultRequest: self._calibrator.get_calibration_result,
-            ListCalibrationDetectorResolutionsRequest: self._calibrator.list_calibration_detector_resolutions,
-            ListCalibrationImageMetadataRequest: self._calibrator.list_calibration_image_metadata_list,
-            ListCalibrationResultMetadataRequest: self._calibrator.list_calibration_result_metadata_list,
-            UpdateCalibrationImageMetadataRequest: self._calibrator.update_calibration_image_metadata,
-            UpdateCalibrationResultMetadataRequest: self._calibrator.update_calibration_result_metadata})
+            CalibrationImageAddRequest: self._calibrator.add_calibration_image,
+            CalibrationCalculateRequest: self._calibrator.calibrate,
+            CalibrationDeleteStagedRequest: self._calibrator.delete_staged,
+            CalibrationImageGetRequest: self._calibrator.get_calibration_image,
+            CalibrationResultGetRequest: self._calibrator.get_calibration_result,
+            CalibrationResolutionListRequest: self._calibrator.list_calibration_detector_resolutions,
+            CalibrationImageMetadataListRequest: self._calibrator.list_calibration_image_metadata_list,
+            CalibrationResultMetadataListRequest: self._calibrator.list_calibration_result_metadata_list,
+            CalibrationImageMetadataUpdateRequest: self._calibrator.update_calibration_image_metadata,
+            CalibrationResultMetadataUpdateRequest: self._calibrator.update_calibration_result_metadata})
         return return_value
     
     # Camera
@@ -124,10 +124,10 @@ class Detector(MCTComponent):
     def set_capture_properties(self, **kwargs) -> EmptyResponse | ErrorResponse:
         return self._camera_interface.set_capture_properties(**kwargs)
 
-    def get_capture_properties(self, **_kwargs) -> GetCameraParametersResponse | ErrorResponse:
+    def get_capture_properties(self, **_kwargs) -> CameraParametersGetResponse | ErrorResponse:
         return self._camera_interface.get_capture_properties(**_kwargs)
 
-    def get_capture_image(self, **kwargs) -> GetCaptureImageResponse:
+    def get_capture_image(self, **kwargs) -> CameraImageGetResponse:
         return self._camera_interface.get_capture_image(**kwargs)
 
     def start_capture(self, **kwargs) -> MCTResponse:
@@ -140,10 +140,10 @@ class Detector(MCTComponent):
     def set_detection_parameters(self, **kwargs) -> EmptyResponse | ErrorResponse:
         return self._marker_interface.set_detection_parameters(**kwargs)
 
-    def get_detection_parameters(self, **_kwargs) -> GetDetectionParametersResponse | ErrorResponse:
+    def get_detection_parameters(self, **_kwargs) -> MarkerParametersGetResponse | ErrorResponse:
         return self._marker_interface.get_detection_parameters(**_kwargs)
 
-    def get_marker_snapshots(self, **kwargs) -> GetMarkerSnapshotsResponse:
+    def get_marker_snapshots(self, **kwargs) -> DetectorFrameGetResponse:
         return self._marker_interface.get_marker_snapshots(**kwargs)
 
     def internal_update_marker_corners(self):

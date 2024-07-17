@@ -13,20 +13,19 @@ from src.common.structures import \
     IntrinsicParameters, \
     MarkerSnapshot
 from src.detector.api import \
-    GetCaptureImageResponse, \
-    GetCameraParametersResponse, \
-    GetDetectionParametersResponse, \
-    GetMarkerSnapshotsResponse, \
-    StartCaptureRequest, \
-    StopCaptureRequest
-from src.detector.api import \
-    AddCalibrationImageResponse, \
-    CalibrateResponse, \
-    GetCalibrationImageResponse, \
-    GetCalibrationResultResponse, \
-    ListCalibrationDetectorResolutionsResponse, \
-    ListCalibrationImageMetadataResponse, \
-    ListCalibrationResultMetadataResponse
+    CalibrationImageAddResponse, \
+    CalibrationCalculateResponse, \
+    CameraImageGetResponse, \
+    CameraParametersGetResponse, \
+    MarkerParametersGetResponse, \
+    DetectorFrameGetResponse, \
+    CalibrationImageGetResponse, \
+    CalibrationResultGetResponse, \
+    CalibrationResolutionListResponse, \
+    CalibrationImageMetadataListResponse, \
+    CalibrationResultMetadataListResponse, \
+    DetectorStartRequest, \
+    DetectorStopRequest
 import datetime
 import uuid
 
@@ -58,10 +57,10 @@ class DetectorConnection(Connection):
         self.marker_snapshot_timestamp = datetime.datetime.min
 
     def create_deinitialization_request_series(self) -> MCTRequestSeries:
-        return MCTRequestSeries(series=[StopCaptureRequest()])
+        return MCTRequestSeries(series=[DetectorStopRequest()])
 
     def create_initialization_request_series(self) -> MCTRequestSeries:
-        return MCTRequestSeries(series=[StartCaptureRequest()])
+        return MCTRequestSeries(series=[DetectorStartRequest()])
 
     def handle_deinitialization_response_series(
         self,
@@ -95,17 +94,17 @@ class DetectorConnection(Connection):
 
     def supported_response_types(self) -> list[type[MCTResponse]]:
         return [
-            AddCalibrationImageResponse,
-            CalibrateResponse,
+            CalibrationCalculateResponse,
+            CalibrationImageAddResponse,
+            CalibrationImageGetResponse,
+            CalibrationImageMetadataListResponse,
+            CalibrationResolutionListResponse,
+            CalibrationResultGetResponse,
+            CalibrationResultMetadataListResponse,
+            CameraImageGetResponse,
+            CameraParametersGetResponse,
             DequeueStatusMessagesResponse,
+            DetectorFrameGetResponse,
             EmptyResponse,
             ErrorResponse,
-            GetCalibrationImageResponse,
-            GetCalibrationResultResponse,
-            GetCaptureImageResponse,
-            GetCameraParametersResponse,
-            GetDetectionParametersResponse,
-            GetMarkerSnapshotsResponse,
-            ListCalibrationDetectorResolutionsResponse,
-            ListCalibrationImageMetadataResponse,
-            ListCalibrationResultMetadataResponse]
+            MarkerParametersGetResponse]
