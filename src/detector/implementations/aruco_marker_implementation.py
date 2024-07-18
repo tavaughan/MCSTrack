@@ -1,18 +1,11 @@
-from ..api import \
-    DetectorFrameGetRequest, \
-    DetectorFrameGetResponse, \
-    MarkerParametersGetResponse, \
-    MarkerParametersSetRequest
+from ..exceptions import MCTDetectorRuntimeError
 from ..interfaces import AbstractMarkerInterface
-from src.common import \
-    EmptyResponse, \
-    ErrorResponse, \
-    get_kwarg
 from src.common.structures import \
     CornerRefinementMethod, \
     CORNER_REFINEMENT_METHOD_DICTIONARY_INT_TO_TEXT, \
     CORNER_REFINEMENT_METHOD_DICTIONARY_TEXT_TO_INT, \
     DetectionParameters, \
+    DetectorFrame, \
     MarkerSnapshot, \
     MarkerStatus, \
     MarkerCornerImagePoint
@@ -24,6 +17,7 @@ from typing import Any
 
 
 logger = logging.getLogger(__name__)
+
 
 class ArucoMarker(AbstractMarkerInterface):
     _marker_dictionary: Any | None  # created by OpenCV, type cv2.aruco.Dictionary
@@ -48,106 +42,95 @@ class ArucoMarker(AbstractMarkerInterface):
         self.marker_status.status = MarkerStatus.Status.RUNNING
 
     # noinspection DuplicatedCode
-    def set_detection_parameters(self, **kwargs) -> EmptyResponse | ErrorResponse:
-        """
-        :key client_identifier: str
-        :key request: SetDetectionParametersRequest
-        """
+    def set_detection_parameters(
+        self,
+        parameters: DetectionParameters
+    ) -> None:
 
-        request: MarkerParametersSetRequest = get_kwarg(
-            kwargs=kwargs,
-            key="request",
-            arg_type=MarkerParametersSetRequest)
+        p: DetectionParameters = parameters
 
-        params: DetectionParameters = request.parameters
+        if p.adaptive_thresh_win_size_min:
+            self._marker_parameters.adaptiveThreshWinSizeMin = p.adaptive_thresh_win_size_min
+        if p.adaptive_thresh_win_size_max:
+            self._marker_parameters.adaptiveThreshWinSizeMax = p.adaptive_thresh_win_size_max
+        if p.adaptive_thresh_win_size_step:
+            self._marker_parameters.adaptiveThreshWinSizeStep = p.adaptive_thresh_win_size_step
+        if p.adaptive_thresh_constant:
+            self._marker_parameters.adaptiveThreshConstant = p.adaptive_thresh_constant
 
-        if params is None:
-            return ErrorResponse(message="Received empty parameters.")
+        if p.min_marker_perimeter_rate:
+            self._marker_parameters.minMarkerPerimeterRate = p.min_marker_perimeter_rate
+        if p.max_marker_perimeter_rate:
+            self._marker_parameters.maxMarkerPerimeterRate = p.max_marker_perimeter_rate
+        if p.polygonal_approx_accuracy_rate:
+            self._marker_parameters.polygonalApproxAccuracyRate = p.polygonal_approx_accuracy_rate
+        if p.min_corner_distance_rate:
+            self._marker_parameters.minCornerDistanceRate = p.min_corner_distance_rate
+        if p.min_marker_distance_rate:
+            self._marker_parameters.minMarkerDistanceRate = p.min_marker_distance_rate
+        if p.min_distance_to_border:
+            self._marker_parameters.minDistanceToBorder = p.min_distance_to_border
 
-        if params.adaptive_thresh_win_size_min:
-            self._marker_parameters.adaptiveThreshWinSizeMin = params.adaptive_thresh_win_size_min
-        if params.adaptive_thresh_win_size_max:
-            self._marker_parameters.adaptiveThreshWinSizeMax = params.adaptive_thresh_win_size_max
-        if params.adaptive_thresh_win_size_step:
-            self._marker_parameters.adaptiveThreshWinSizeStep = params.adaptive_thresh_win_size_step
-        if params.adaptive_thresh_constant:
-            self._marker_parameters.adaptiveThreshConstant = params.adaptive_thresh_constant
-
-        if params.min_marker_perimeter_rate:
-            self._marker_parameters.minMarkerPerimeterRate = params.min_marker_perimeter_rate
-        if params.max_marker_perimeter_rate:
-            self._marker_parameters.maxMarkerPerimeterRate = params.max_marker_perimeter_rate
-        if params.polygonal_approx_accuracy_rate:
-            self._marker_parameters.polygonalApproxAccuracyRate = params.polygonal_approx_accuracy_rate
-        if params.min_corner_distance_rate:
-            self._marker_parameters.minCornerDistanceRate = params.min_corner_distance_rate
-        if params.min_marker_distance_rate:
-            self._marker_parameters.minMarkerDistanceRate = params.min_marker_distance_rate
-        if params.min_distance_to_border:
-            self._marker_parameters.minDistanceToBorder = params.min_distance_to_border
-
-        if params.corner_refinement_max_iterations:
-            self._marker_parameters.cornerRefinementMaxIterations = params.corner_refinement_max_iterations
-        if params.corner_refinement_method:
-            if params.corner_refinement_method in CORNER_REFINEMENT_METHOD_DICTIONARY_TEXT_TO_INT:
+        if p.corner_refinement_max_iterations:
+            self._marker_parameters.cornerRefinementMaxIterations = p.corner_refinement_max_iterations
+        if p.corner_refinement_method:
+            if p.corner_refinement_method in CORNER_REFINEMENT_METHOD_DICTIONARY_TEXT_TO_INT:
                 self._marker_parameters.cornerRefinementMethod = \
-                    CORNER_REFINEMENT_METHOD_DICTIONARY_TEXT_TO_INT[params.corner_refinement_method]
+                    CORNER_REFINEMENT_METHOD_DICTIONARY_TEXT_TO_INT[p.corner_refinement_method]
             else:
-                return ErrorResponse(
-                    message=f"Failed to find corner refinement method {params.corner_refinement_method}.")
-        if params.corner_refinement_min_accuracy:
-            self._marker_parameters.cornerRefinementMinAccuracy = params.corner_refinement_min_accuracy
-        if params.corner_refinement_win_size:
-            self._marker_parameters.cornerRefinementWinSize = params.corner_refinement_win_size
+                raise MCTDetectorRuntimeError(
+                    message=f"Failed to find corner refinement method {p.corner_refinement_method}.")
+        if p.corner_refinement_min_accuracy:
+            self._marker_parameters.cornerRefinementMinAccuracy = p.corner_refinement_min_accuracy
+        if p.corner_refinement_win_size:
+            self._marker_parameters.cornerRefinementWinSize = p.corner_refinement_win_size
 
-        if params.marker_border_bits:
-            self._marker_parameters.markerBorderBits = params.marker_border_bits
-        if params.min_otsu_std_dev:
-            self._marker_parameters.minOtsuStdDev = params.min_otsu_std_dev
-        if params.perspective_remove_pixel_per_cell:
-            self._marker_parameters.perspectiveRemovePixelPerCell = params.perspective_remove_pixel_per_cell
-        if params.perspective_remove_ignored_margin_per_cell:
+        if p.marker_border_bits:
+            self._marker_parameters.markerBorderBits = p.marker_border_bits
+        if p.min_otsu_std_dev:
+            self._marker_parameters.minOtsuStdDev = p.min_otsu_std_dev
+        if p.perspective_remove_pixel_per_cell:
+            self._marker_parameters.perspectiveRemovePixelPerCell = p.perspective_remove_pixel_per_cell
+        if p.perspective_remove_ignored_margin_per_cell:
             self._marker_parameters.perspectiveRemoveIgnoredMarginPerCell = \
-                params.perspective_remove_ignored_margin_per_cell
+                p.perspective_remove_ignored_margin_per_cell
 
-        if params.max_erroneous_bits_in_border_rate:
-            self._marker_parameters.maxErroneousBitsInBorderRate = params.max_erroneous_bits_in_border_rate
-        if params.error_correction_rate:
-            self._marker_parameters.errorCorrectionRate = params.error_correction_rate
-        if params.detect_inverted_marker:
-            self._marker_parameters.detectInvertedMarker = params.detect_inverted_marker
+        if p.max_erroneous_bits_in_border_rate:
+            self._marker_parameters.maxErroneousBitsInBorderRate = p.max_erroneous_bits_in_border_rate
+        if p.error_correction_rate:
+            self._marker_parameters.errorCorrectionRate = p.error_correction_rate
+        if p.detect_inverted_marker:
+            self._marker_parameters.detectInvertedMarker = p.detect_inverted_marker
 
-        if params.april_tag_critical_rad:
-            self._marker_parameters.aprilTagCriticalRad = params.april_tag_critical_rad
-        if params.april_tag_deglitch:
-            self._marker_parameters.aprilTagDeglitch = params.april_tag_deglitch
-        if params.april_tag_max_line_fit_mse:
-            self._marker_parameters.aprilTagMaxLineFitMse = params.april_tag_max_line_fit_mse
-        if params.april_tag_max_nmaxima:
-            self._marker_parameters.aprilTagMaxNmaxima = params.april_tag_max_nmaxima
-        if params.april_tag_min_cluster_pixels:
-            self._marker_parameters.aprilTagMinClusterPixels = params.april_tag_min_cluster_pixels
-        if params.april_tag_min_white_black_diff:
-            self._marker_parameters.aprilTagMinWhiteBlackDiff = params.april_tag_min_white_black_diff
-        if params.april_tag_quad_decimate:
-            self._marker_parameters.aprilTagQuadDecimate = params.april_tag_quad_decimate
-        if params.april_tag_quad_sigma:
-            self._marker_parameters.aprilTagQuadSigma = params.april_tag_quad_sigma
+        if p.april_tag_critical_rad:
+            self._marker_parameters.aprilTagCriticalRad = p.april_tag_critical_rad
+        if p.april_tag_deglitch:
+            self._marker_parameters.aprilTagDeglitch = p.april_tag_deglitch
+        if p.april_tag_max_line_fit_mse:
+            self._marker_parameters.aprilTagMaxLineFitMse = p.april_tag_max_line_fit_mse
+        if p.april_tag_max_nmaxima:
+            self._marker_parameters.aprilTagMaxNmaxima = p.april_tag_max_nmaxima
+        if p.april_tag_min_cluster_pixels:
+            self._marker_parameters.aprilTagMinClusterPixels = p.april_tag_min_cluster_pixels
+        if p.april_tag_min_white_black_diff:
+            self._marker_parameters.aprilTagMinWhiteBlackDiff = p.april_tag_min_white_black_diff
+        if p.april_tag_quad_decimate:
+            self._marker_parameters.aprilTagQuadDecimate = p.april_tag_quad_decimate
+        if p.april_tag_quad_sigma:
+            self._marker_parameters.aprilTagQuadSigma = p.april_tag_quad_sigma
 
         # Note: a relatively recent addition to OpenCV, may not be available in some python versions
         if hasattr(self._marker_parameters, "useAruco3Detection"):
-            if params.use_aruco_3_detection:
-                self._marker_parameters.useAruco3Detection = params.use_aruco_3_detection
-            if params.min_side_length_canonical_img:
-                self._marker_parameters.minSideLengthCanonicalImg = params.min_side_length_canonical_img
-            if params.min_marker_length_ratio_original_img:
-                self._marker_parameters.minMarkerLengthRatioOriginalImg = params.min_marker_length_ratio_original_img
+            if p.use_aruco_3_detection:
+                self._marker_parameters.useAruco3Detection = p.use_aruco_3_detection
+            if p.min_side_length_canonical_img:
+                self._marker_parameters.minSideLengthCanonicalImg = p.min_side_length_canonical_img
+            if p.min_marker_length_ratio_original_img:
+                self._marker_parameters.minMarkerLengthRatioOriginalImg = p.min_marker_length_ratio_original_img
 
-        return EmptyResponse()
-
-    def get_detection_parameters(self, **_kwargs) -> MarkerParametersGetResponse | ErrorResponse:
+    def get_detection_parameters(self) -> DetectionParameters:
         if self._marker_parameters.cornerRefinementMethod not in CORNER_REFINEMENT_METHOD_DICTIONARY_INT_TO_TEXT:
-            return ErrorResponse(
+            raise MCTDetectorRuntimeError(
                 message=f"Corner refinement method appears to be set to an invalid value: "
                         f"{self._marker_parameters.corner_refinement_method}.")
         corner_refinement_method_text: CornerRefinementMethod = \
@@ -182,24 +165,13 @@ class ArucoMarker(AbstractMarkerInterface):
             perspective_remove_ignored_margin_per_cell=self._marker_parameters.perspectiveRemoveIgnoredMarginPerCell,
             perspective_remove_pixel_per_cell=self._marker_parameters.perspectiveRemovePixelPerCell,
             polygonal_approx_accuracy_rate=self._marker_parameters.polygonalApproxAccuracyRate)
-        return MarkerParametersGetResponse(parameters=params)
+        return params
 
-    def get_marker_snapshots(self, **kwargs) -> DetectorFrameGetResponse:
-        """
-        :key request: GetMarkerSnapshotsRequest
-        """
-
-        request: DetectorFrameGetRequest = get_kwarg(
-            kwargs=kwargs,
-            key="request",
-            arg_type=DetectorFrameGetRequest)
-
-        response_dict: dict = dict()
-        if request.include_detected:
-            response_dict["detected_marker_snapshots"] = self._marker_detected_snapshots
-        if request.include_rejected:
-            response_dict["rejected_marker_snapshots"] = self._marker_rejected_snapshots
-        return DetectorFrameGetResponse(**response_dict)
+    def get_marker_snapshots(self) -> DetectorFrame:
+        return DetectorFrame(
+            detected_marker_snapshots=self._marker_detected_snapshots,
+            rejected_marker_snapshots=self._marker_rejected_snapshots,
+            timestamp_utc_iso8601=self.marker_timestamp_utc.isoformat())
 
     def internal_update_marker_corners(self, captured_image) -> None:
         if self._marker_dictionary is None:

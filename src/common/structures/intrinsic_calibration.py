@@ -16,7 +16,6 @@ class IntrinsicCalibrationFrameResult(BaseModel):
 
 class IntrinsicCalibration(BaseModel):
     timestamp_utc: str = Field()
-    detector_serial_identifier: str = Field()
     image_resolution: ImageResolution = Field()
     calibrated_values: IntrinsicParameters = Field()
     calibrated_stdevs: list[float] = Field()

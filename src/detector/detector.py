@@ -1,13 +1,20 @@
 from .api import \
     CalibrationCalculateRequest, \
+    CalibrationCalculateResponse, \
     CalibrationDeleteStagedRequest, \
     CalibrationImageAddRequest, \
+    CalibrationImageAddResponse, \
     CalibrationImageGetRequest, \
+    CalibrationImageGetResponse, \
     CalibrationImageMetadataListRequest, \
+    CalibrationImageMetadataListResponse, \
     CalibrationImageMetadataUpdateRequest, \
-    CalibrationResultGetRequest, \
     CalibrationResolutionListRequest, \
+    CalibrationResolutionListResponse, \
+    CalibrationResultGetRequest, \
+    CalibrationResultGetResponse, \
     CalibrationResultMetadataListRequest, \
+    CalibrationResultMetadataListResponse, \
     CalibrationResultMetadataUpdateRequest, \
     CameraImageGetRequest, \
     CameraImageGetResponse, \
@@ -22,21 +29,29 @@ from .api import \
     MarkerParametersGetResponse, \
     MarkerParametersSetRequest
 from .calibrator import Calibrator
-from .exceptions import UpdateCaptureError
+from .exceptions import \
+    MCTDetectorRuntimeError
 from .interfaces import \
     AbstractMarkerInterface, \
     AbstractCameraInterface
 from .structures import \
+    CalibrationImageMetadata, \
+    CalibrationResultMetadata, \
     DetectorConfiguration
 from src.common import \
     EmptyResponse, \
     ErrorResponse, \
+    get_kwarg, \
     MCTComponent, \
     MCTRequest, \
     MCTResponse
 from src.common.structures import \
     CaptureStatus, \
-    MarkerStatus
+    DetectorFrame, \
+    DetectionParameters, \
+    ImageResolution, \
+    KeyValueMetaAbstract, \
+    MarkerStatus, IntrinsicCalibration
 import logging
 from typing import Callable
 
@@ -78,10 +93,13 @@ class Detector(MCTComponent):
 
     async def internal_update(self):
         if self._camera_interface._capture_status.status == CaptureStatus.Status.RUNNING:
-            self.internal_update_capture()
+            try:
+                self._camera_interface.internal_update_capture()
+            except MCTDetectorRuntimeError as e:
+                self.add_status_message(severity="error", message=e.message)
         if self._marker_interface.marker_status.status == MarkerStatus.Status.RUNNING and \
            self._camera_interface._captured_timestamp_utc > self._marker_interface.marker_timestamp_utc:
-            self.internal_update_marker_corners()
+            self._marker_interface.internal_update_marker_corners(self._camera_interface._captured_image)
         self._frame_count += 1
         if self._frame_count % 1000 == 0:
             print(f"Update count: {self._frame_count}")
@@ -89,63 +107,225 @@ class Detector(MCTComponent):
     def supported_request_types(self) -> dict[type[MCTRequest], Callable[[dict], MCTResponse]]:
         return_value: dict[type[MCTRequest], Callable[[dict], MCTResponse]] = super().supported_request_types()
         return_value.update({
-
-            DetectorFrameGetRequest: self.get_marker_snapshots,
-            DetectorStartRequest: self.start_capture,
-            DetectorStopRequest: self.stop_capture,
-
-            CameraImageGetRequest: self.get_capture_image,
-            CameraParametersGetRequest: self.get_capture_properties,
-            CameraParametersSetRequest: self.set_capture_properties,
-
-            MarkerParametersGetRequest: self.get_detection_parameters,
-            MarkerParametersSetRequest: self.set_detection_parameters,
-
-            CalibrationCalculateRequest: self._calibrator.calibrate,
-            CalibrationDeleteStagedRequest: self._calibrator.delete_staged,
-            CalibrationImageAddRequest: self._calibrator.add_calibration_image,
-            CalibrationImageGetRequest: self._calibrator.get_calibration_image,
-            CalibrationImageMetadataListRequest: self._calibrator.list_calibration_image_metadata_list,
-            CalibrationImageMetadataUpdateRequest: self._calibrator.update_calibration_image_metadata,
-            CalibrationResolutionListRequest: self._calibrator.list_calibration_detector_resolutions,
-            CalibrationResultGetRequest: self._calibrator.get_calibration_result,
-            CalibrationResultMetadataListRequest: self._calibrator.list_calibration_result_metadata_list,
-            CalibrationResultMetadataUpdateRequest: self._calibrator.update_calibration_result_metadata})
+            DetectorFrameGetRequest: self.detector_frame_get,
+            DetectorStartRequest: self.detector_start,
+            DetectorStopRequest: self.detector_stop,
+            CalibrationCalculateRequest: self.calibration_calculate,
+            CalibrationDeleteStagedRequest: self.calibration_delete_staged,
+            CalibrationImageAddRequest: self.calibration_image_add,
+            CalibrationImageGetRequest: self.calibration_image_get,
+            CalibrationImageMetadataListRequest: self.calibration_image_metadata_list,
+            CalibrationImageMetadataUpdateRequest: self.calibration_image_metadata_update,
+            CalibrationResolutionListRequest: self.calibration_resolution_list,
+            CalibrationResultGetRequest: self.calibration_result_get,
+            CalibrationResultMetadataListRequest: self.calibration_result_metadata_list,
+            CalibrationResultMetadataUpdateRequest: self.calibration_result_metadata_update,
+            CameraImageGetRequest: self.camera_image_get,
+            CameraParametersGetRequest: self.camera_parameters_get,
+            CameraParametersSetRequest: self.camera_parameters_set,
+            MarkerParametersGetRequest: self.marker_parameters_get,
+            MarkerParametersSetRequest: self.marker_parameters_set})
         return return_value
-    
-    # Camera
-    def internal_update_capture(self):
+
+    def calibration_calculate(self, **kwargs) -> CalibrationCalculateResponse | ErrorResponse:
+        request: CalibrationCalculateRequest = get_kwarg(
+            kwargs=kwargs,
+            key="request",
+            arg_type=CalibrationCalculateRequest)
+        result_identifier: str
+        intrinsic_calibration: IntrinsicCalibration
         try:
-            self._camera_interface.internal_update_capture()
-        except UpdateCaptureError as e:
-            self.add_status_message(
-                severity=e.severity,
-                message=e.message)
+            result_identifier, intrinsic_calibration = self._calibrator.calibrate(request.image_resolution)
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return CalibrationCalculateResponse(
+            result_identifier=result_identifier,
+            intrinsic_calibration=intrinsic_calibration)
 
-    def set_capture_properties(self, **kwargs) -> EmptyResponse | ErrorResponse:
-        return self._camera_interface.set_capture_properties(**kwargs)
+    def calibration_delete_staged(self, **_kwargs) -> EmptyResponse | ErrorResponse:
+        try:
+            self._calibrator.delete_staged()
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return EmptyResponse()
 
-    def get_capture_properties(self, **_kwargs) -> CameraParametersGetResponse | ErrorResponse:
-        return self._camera_interface.get_capture_properties(**_kwargs)
+    def calibration_image_add(self, **kwargs) -> CalibrationImageAddResponse | ErrorResponse:
+        request: CalibrationImageAddRequest = get_kwarg(
+            kwargs=kwargs,
+            key="request",
+            arg_type=CalibrationImageAddRequest)
+        try:
+            image_identifier: str = self._calibrator.add_calibration_image(image_base64=request.image_base64)
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return CalibrationImageAddResponse(image_identifier=image_identifier)
 
-    def get_capture_image(self, **kwargs) -> CameraImageGetResponse:
-        return self._camera_interface.get_capture_image(**kwargs)
+    def calibration_image_get(self, **kwargs) -> CalibrationImageGetResponse | ErrorResponse:
+        request: CalibrationImageGetRequest = get_kwarg(
+            kwargs=kwargs,
+            key="request",
+            arg_type=CalibrationImageGetRequest)
+        image_base64: str
+        try:
+            image_base64 = self._calibrator.get_calibration_image(image_identifier=request.image_identifier)
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return CalibrationImageGetResponse(image_base64=image_base64)
 
-    def start_capture(self, **kwargs) -> MCTResponse:
-        return self._camera_interface.start_capture(**kwargs)
+    def calibration_image_metadata_list(self, **kwargs) -> CalibrationImageMetadataListResponse | ErrorResponse:
+        request: CalibrationImageMetadataListRequest = get_kwarg(
+            kwargs=kwargs,
+            key="request",
+            arg_type=CalibrationImageMetadataListRequest)
+        image_metadata_list: list[CalibrationImageMetadata]
+        try:
+            image_metadata_list = self._calibrator.list_calibration_image_metadata_list(
+                image_resolution=request.image_resolution)
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return CalibrationImageMetadataListResponse(metadata_list=image_metadata_list)
 
-    def stop_capture(self, **kwargs) -> MCTResponse:
-        return self._camera_interface.stop_capture(**kwargs)
-    
-    # Marker
-    def set_detection_parameters(self, **kwargs) -> EmptyResponse | ErrorResponse:
-        return self._marker_interface.set_detection_parameters(**kwargs)
+    def calibration_image_metadata_update(self, **kwargs) -> EmptyResponse | ErrorResponse:
+        request: CalibrationImageMetadataUpdateRequest = get_kwarg(
+            kwargs=kwargs,
+            key="request",
+            arg_type=CalibrationImageMetadataUpdateRequest)
+        try:
+            self._calibrator.update_calibration_image_metadata(
+                image_identifier=request.image_identifier,
+                image_state=request.image_state,
+                image_label=request.image_label)
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return EmptyResponse()
 
-    def get_detection_parameters(self, **_kwargs) -> MarkerParametersGetResponse | ErrorResponse:
-        return self._marker_interface.get_detection_parameters(**_kwargs)
+    def calibration_resolution_list(self, **_kwargs) -> CalibrationResolutionListResponse | ErrorResponse:
+        resolutions: list[ImageResolution]
+        try:
+            resolutions = self._calibrator.list_calibration_detector_resolutions()
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return CalibrationResolutionListResponse(resolutions=resolutions)
 
-    def get_marker_snapshots(self, **kwargs) -> DetectorFrameGetResponse:
-        return self._marker_interface.get_marker_snapshots(**kwargs)
+    def calibration_result_get(self, **kwargs) -> CalibrationResultGetResponse | ErrorResponse:
+        request: CalibrationResultGetRequest = get_kwarg(
+            kwargs=kwargs,
+            key="request",
+            arg_type=CalibrationResultGetRequest)
+        intrinsic_calibration: IntrinsicCalibration
+        try:
+            intrinsic_calibration = self._calibrator.get_calibration_result(result_identifier=request.result_identifier)
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return CalibrationResultGetResponse(intrinsic_calibration=intrinsic_calibration)
 
-    def internal_update_marker_corners(self):
-        return self._marker_interface.internal_update_marker_corners(self._camera_interface._captured_image)
+    def calibration_result_metadata_list(self, **kwargs) -> CalibrationResultMetadataListResponse | ErrorResponse:
+        request: CalibrationResultMetadataListRequest = get_kwarg(
+            kwargs=kwargs,
+            key="request",
+            arg_type=CalibrationResultMetadataListRequest)
+        result_metadata_list: list[CalibrationResultMetadata]
+        try:
+            result_metadata_list = self._calibrator.list_calibration_result_metadata_list(
+                image_resolution=request.image_resolution)
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return CalibrationResultMetadataListResponse(metadata_list=result_metadata_list)
+
+    def calibration_result_metadata_update(self, **kwargs) -> EmptyResponse | ErrorResponse:
+        request: CalibrationResultMetadataUpdateRequest = get_kwarg(
+            kwargs=kwargs,
+            key="request",
+            arg_type=CalibrationResultMetadataUpdateRequest)
+        try:
+            self._calibrator.update_calibration_result_metadata(
+                result_identifier=request.result_identifier,
+                result_state=request.result_state)
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return EmptyResponse()
+
+    def camera_image_get(self, **kwargs) -> CameraImageGetResponse | ErrorResponse:
+        request: CameraImageGetRequest = get_kwarg(
+            kwargs=kwargs,
+            key="request",
+            arg_type=CameraImageGetRequest)
+        encoded_image_base64: str
+        try:
+            encoded_image_base64 = self._camera_interface.get_encoded_image(image_format=request.format)
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return CameraImageGetResponse(
+            format=request.format,
+            image_base64=encoded_image_base64)
+
+    def camera_parameters_get(self, **_kwargs) -> CameraParametersGetResponse | ErrorResponse:
+        parameters: list[KeyValueMetaAbstract]
+        try:
+            parameters = self._camera_interface.get_capture_properties()
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return CameraParametersGetResponse(parameters=parameters)
+
+    def camera_parameters_set(self, **kwargs) -> EmptyResponse | ErrorResponse:
+        request: CameraParametersSetRequest = get_kwarg(
+            kwargs=kwargs,
+            key="request",
+            arg_type=CameraParametersSetRequest)
+        try:
+            self._camera_interface.set_capture_properties(parameters=request.parameters)
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return EmptyResponse()
+
+    def detector_frame_get(self, **kwargs) -> DetectorFrameGetResponse | ErrorResponse:
+        request: DetectorFrameGetRequest = get_kwarg(
+            kwargs=kwargs,
+            key="request",
+            arg_type=DetectorFrameGetRequest)
+        detector_frame: DetectorFrame
+        try:
+            detector_frame = self._marker_interface.get_marker_snapshots()
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        response: DetectorFrameGetResponse = DetectorFrameGetResponse(
+            detected_marker_snapshots=None,
+            rejected_marker_snapshots=None)
+        if request.include_detected:
+            response.detected_marker_snapshots = detector_frame.detected_marker_snapshots
+        if request.include_rejected:
+            response.rejected_marker_snapshots = detector_frame.rejected_marker_snapshots
+        return response
+
+    def detector_start(self, **_kwargs) -> EmptyResponse | ErrorResponse:
+        try:
+            self._camera_interface.start_capture()
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return EmptyResponse()
+
+    def detector_stop(self, **_kwargs) -> EmptyResponse | ErrorResponse:
+        try:
+            self._camera_interface.stop_capture()
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return EmptyResponse()
+
+    def marker_parameters_get(self, **_kwargs) -> MarkerParametersGetResponse | ErrorResponse:
+        parameters: DetectionParameters
+        try:
+            parameters = self._marker_interface.get_detection_parameters()
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return MarkerParametersGetResponse(parameters=parameters)
+
+    def marker_parameters_set(self, **kwargs) -> EmptyResponse | ErrorResponse:
+        request: MarkerParametersSetRequest = get_kwarg(
+            kwargs=kwargs,
+            key="request",
+            arg_type=MarkerParametersSetRequest)
+        try:
+            self._marker_interface.set_detection_parameters(parameters=request.parameters)
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return EmptyResponse()

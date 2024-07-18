@@ -1,19 +1,5 @@
-from .api import \
-    CalibrationCalculateRequest, \
-    CalibrationCalculateResponse, \
-    CalibrationImageAddRequest, \
-    CalibrationImageAddResponse, \
-    CalibrationImageGetRequest, \
-    CalibrationImageGetResponse, \
-    CalibrationImageMetadataListRequest, \
-    CalibrationImageMetadataListResponse, \
-    CalibrationImageMetadataUpdateRequest, \
-    CalibrationResolutionListResponse, \
-    CalibrationResultGetRequest, \
-    CalibrationResultGetResponse, \
-    CalibrationResultMetadataListRequest, \
-    CalibrationResultMetadataListResponse, \
-    CalibrationResultMetadataUpdateRequest
+from .exceptions import \
+    MCTDetectorRuntimeError
 from .structures import \
     CalibratorConfiguration, \
     CalibrationImageMetadata, \
@@ -24,9 +10,6 @@ from .structures import \
     CalibrationResultState, \
     CharucoBoardSpecification
 from src.common import \
-    EmptyResponse, \
-    ErrorResponse, \
-    get_kwarg, \
     ImageCoding, \
     StatusMessageSource
 from src.common.structures import \
@@ -86,24 +69,23 @@ class Calibrator:
             self._status_message_source.enqueue_status_message(severity="critical", message=message)
             raise RuntimeError(message)
 
-    def add_calibration_image(self, **kwargs) -> CalibrationImageAddResponse | ErrorResponse:
-        request: CalibrationImageAddRequest = get_kwarg(
-            kwargs=kwargs,
-            key="request",
-            arg_type=object)
-        image_data: numpy.ndarray = ImageCoding.base64_to_image(input_base64=request.image_base64, color_mode="color")
+    def add_calibration_image(
+        self,
+        image_base64: str
+    ) -> str:  # id of image
+        image_data: numpy.ndarray = ImageCoding.base64_to_image(input_base64=image_base64, color_mode="color")
         map_key: ImageResolution = ImageResolution(x_px=image_data.shape[1], y_px=image_data.shape[0])
         # Before making any changes to the calibration map, make sure folders exist,
         # and that this file does not somehow already exist (highly unlikely)
         key_path: str = self._path_for_map_key(map_key=map_key)
         if not self._exists(path=key_path, pathtype="path", create_path=True):
-            return ErrorResponse(message=f"Failed to create storage location for input image.")
+            raise MCTDetectorRuntimeError(message=f"Failed to create storage location for input image.")
         image_identifier: str = str(uuid.uuid4())
         image_filepath = self._filepath_for_calibration_image(
             map_key=map_key,
             image_identifier=image_identifier)
         if os.path.exists(image_filepath):
-            return ErrorResponse(
+            raise MCTDetectorRuntimeError(
                 message=f"Image {image_identifier} appears to already exist. This is never expected to occur. "
                         f"Please try again, and if this error continues to occur then please report a bug.")
         if map_key not in self._calibration_map:
@@ -115,18 +97,17 @@ class Calibrator:
         with (open(image_filepath, 'wb') as in_file):
             in_file.write(image_bytes)
         self._calibration_map_save()
-        return CalibrationImageAddResponse(image_identifier=image_identifier)
+        return image_identifier
 
-    def calibrate(self, **kwargs) -> CalibrationCalculateResponse | ErrorResponse:
-        request: CalibrationCalculateRequest = get_kwarg(
-            kwargs=kwargs,
-            key="request",
-            arg_type=CalibrationCalculateRequest)
+    def calibrate(
+        self,
+        image_resolution: ImageResolution
+    ) -> tuple[str, IntrinsicCalibration]:
 
-        calibration_key: ImageResolution = request.image_resolution
+        calibration_key: ImageResolution = image_resolution
         if calibration_key not in self._calibration_map:
-            return ErrorResponse(
-                message=f"No images for given resolution {str(request.image_resolution)} found.")
+            raise MCTDetectorRuntimeError(
+                message=f"No images for given resolution {str(image_resolution)} found.")
 
         # TODO: Instead of detecting the markers here, maybe the detector could do it instead (just send the points/ids)
 
@@ -183,7 +164,7 @@ class Calibrator:
                 all_charuco_ids.append(frame_charuco_ids)
 
         if len(all_charuco_corners) <= 0:
-            return ErrorResponse(message="The input images did not contain visible markers.")
+            raise MCTDetectorRuntimeError(message="The input images did not contain visible markers.")
 
         # outputs to be stored in these containers
         calibration_result = cv2.aruco.calibrateCameraCharucoExtended(
@@ -211,8 +192,7 @@ class Calibrator:
 
         intrinsic_calibration: IntrinsicCalibration = IntrinsicCalibration(
             timestamp_utc=str(datetime.datetime.utcnow()),
-            detector_serial_identifier=request.detector_serial_identifier,
-            image_resolution=request.image_resolution,
+            image_resolution=image_resolution,
             calibrated_values=IntrinsicParameters(
                 focal_length_x_px=charuco_camera_matrix[0, 0],
                 focal_length_y_px=charuco_camera_matrix[1, 1],
@@ -266,11 +246,9 @@ class Calibrator:
             image_identifiers=image_identifiers)
         self._calibration_map[calibration_key].result_metadata_list.append(result_metadata)
         self._calibration_map_save()
-        return CalibrationCalculateResponse(
-            result_identifier=result_identifier,
-            intrinsic_calibration=intrinsic_calibration)
+        return result_identifier, intrinsic_calibration
 
-    def delete_staged(self, **_kwargs) -> EmptyResponse:
+    def delete_staged(self) -> None:
         for calibration_key in self._calibration_map.keys():
             calibration_value: CalibrationMapValue = self._calibration_map[calibration_key]
             image_indices_to_delete: list = list()
@@ -292,167 +270,161 @@ class Calibrator:
             for i in reversed(result_indices_to_delete):
                 del calibration_value.result_metadata_list[i]
         self._calibration_map_save()
-        return EmptyResponse()
 
     # noinspection DuplicatedCode
-    def get_calibration_image(self, **kwargs) -> CalibrationImageGetResponse | ErrorResponse:
-        request: CalibrationImageGetRequest = get_kwarg(
-            kwargs=kwargs,
-            key="request",
-            arg_type=CalibrationImageGetRequest)
+    def get_calibration_image(
+        self,
+        image_identifier: str
+    ) -> str:  # image in base64
         found_count: int = 0
         matching_image_resolution: ImageResolution | None = None
         for image_resolution in self._calibration_map:
             for image in self._calibration_map[image_resolution].image_metadata_list:
-                if image.identifier == request.image_identifier:
+                if image.identifier == image_identifier:
                     found_count += 1
                     matching_image_resolution = image_resolution
                     break
         if found_count < 1:
-            return ErrorResponse(
-                message=f"Image identifier {request.image_identifier} is not associated with any image.")
+            raise MCTDetectorRuntimeError(
+                message=f"Image identifier {image_identifier} is not associated with any image.")
         elif found_count > 1:
-            return ErrorResponse(
-                message=f"Image identifier {request.image_identifier} is associated with multiple images.")
+            raise MCTDetectorRuntimeError(
+                message=f"Image identifier {image_identifier} is associated with multiple images.")
 
         image_filepath = self._filepath_for_calibration_image(
             map_key=matching_image_resolution,
-            image_identifier=request.image_identifier)
+            image_identifier=image_identifier)
         if not os.path.exists(image_filepath):
-            return ErrorResponse(
-                message=f"File does not exist for image {request.image_identifier} "
+            raise MCTDetectorRuntimeError(
+                message=f"File does not exist for image {image_identifier} "
                         f"and given resolution {str(matching_image_resolution)}.")
         image_bytes: bytes
         try:
             with (open(image_filepath, 'rb') as in_file):
                 image_bytes = in_file.read()
         except OSError:
-            return ErrorResponse(
-                message=f"Failed to open image {request.image_identifier} for "
+            raise MCTDetectorRuntimeError(
+                message=f"Failed to open image {image_identifier} for "
                         f"given resolution {str(matching_image_resolution)}.")
         image_base64 = ImageCoding.bytes_to_base64(image_bytes=image_bytes)
-        return CalibrationImageGetResponse(image_base64=image_base64)
+        return image_base64
 
     # noinspection DuplicatedCode
-    def get_calibration_result(self, **kwargs) -> CalibrationResultGetResponse | ErrorResponse:
-        request: CalibrationResultGetRequest = get_kwarg(
-            kwargs=kwargs,
-            key="request",
-            arg_type=CalibrationResultGetRequest)
+    def get_calibration_result(
+        self,
+        result_identifier: str
+    ) -> IntrinsicCalibration:
         found_count: int = 0
         matching_image_resolution: ImageResolution | None = None
         for image_resolution in self._calibration_map:
             for result in self._calibration_map[image_resolution].result_metadata_list:
-                if result.identifier == request.result_identifier:
+                if result.identifier == result_identifier:
                     found_count += 1
                     matching_image_resolution = image_resolution
                     break
         if found_count < 1:
-            return ErrorResponse(
-                message=f"Image identifier {request.result_identifier} is not associated with any result.")
+            raise MCTDetectorRuntimeError(
+                message=f"Image identifier {result_identifier} is not associated with any result.")
         elif found_count > 1:
-            return ErrorResponse(
-                message=f"Image identifier {request.result_identifier} is associated with multiple results.")
+            raise MCTDetectorRuntimeError(
+                message=f"Image identifier {result_identifier} is associated with multiple results.")
 
         result_filepath = self._filepath_for_calibration_result(
             map_key=matching_image_resolution,
-            result_identifier=request.result_identifier)
+            result_identifier=result_identifier)
         if not os.path.exists(result_filepath):
-            return ErrorResponse(
-                message=f"File does not exist for result {request.result_identifier} "
+            raise MCTDetectorRuntimeError(
+                message=f"File does not exist for result {result_identifier} "
                         f"and given resolution {str(matching_image_resolution)}.")
         result_json_raw: str
         try:
             with (open(result_filepath, 'r') as in_file):
                 result_json_raw = in_file.read()
         except OSError:
-            return ErrorResponse(
-                message=f"Failed to open result {request.result_identifier} for "
+            raise MCTDetectorRuntimeError(
+                message=f"Failed to open result {result_identifier} for "
                         f"given resolution {str(matching_image_resolution)}.")
         result_json_dict: dict
         try:
             result_json_dict = dict(json.loads(result_json_raw))
         except JSONDecodeError:
-            return ErrorResponse(
-                message=f"Failed to parse result {request.result_identifier} for "
+            raise MCTDetectorRuntimeError(
+                message=f"Failed to parse result {result_identifier} for "
                         f"given resolution {str(matching_image_resolution)}.")
         intrinsic_calibration: IntrinsicCalibration = IntrinsicCalibration(**result_json_dict)
-        return CalibrationResultGetResponse(intrinsic_calibration=intrinsic_calibration)
+        return intrinsic_calibration
 
-    def list_calibration_detector_resolutions(self, **_kwargs) -> CalibrationResolutionListResponse:
+    def list_calibration_detector_resolutions(self) -> list[ImageResolution]:
         resolutions: list[ImageResolution] = list(self._calibration_map.keys())
-        return CalibrationResolutionListResponse(resolutions=resolutions)
+        return resolutions
 
     # noinspection DuplicatedCode
-    def list_calibration_image_metadata_list(self, **kwargs) -> CalibrationImageMetadataListResponse:
-        request: CalibrationImageMetadataListRequest = get_kwarg(
-            kwargs=kwargs,
-            key="request",
-            arg_type=CalibrationImageMetadataListRequest)
-        map_key: ImageResolution = request.image_resolution
+    def list_calibration_image_metadata_list(
+        self,
+        image_resolution: ImageResolution
+    ) -> list[CalibrationImageMetadata]:
         image_metadata_list: list[CalibrationImageMetadata] = list()
+        map_key: ImageResolution = image_resolution
         if map_key in self._calibration_map:
-            image_metadata_list = [image for image in self._calibration_map[map_key].image_metadata_list]
-        return CalibrationImageMetadataListResponse(metadata_list=image_metadata_list)
+            image_metadata_list = self._calibration_map[map_key].image_metadata_list
+        return image_metadata_list
 
     # noinspection DuplicatedCode
-    def list_calibration_result_metadata_list(self, **kwargs) -> CalibrationResultMetadataListResponse:
-        request: CalibrationResultMetadataListRequest = get_kwarg(
-            kwargs=kwargs,
-            key="request",
-            arg_type=CalibrationResultMetadataListRequest)
-        map_key: ImageResolution = request.image_resolution
+    def list_calibration_result_metadata_list(
+        self,
+        image_resolution: ImageResolution
+    ) -> list[CalibrationResultMetadata]:
         result_metadata_list: list[CalibrationResultMetadata] = list()
+        map_key: ImageResolution = image_resolution
         if map_key in self._calibration_map:
-            result_metadata_list = [result for result in self._calibration_map[map_key].result_metadata_list]
-        return CalibrationResultMetadataListResponse(metadata_list=result_metadata_list)
+            result_metadata_list = self._calibration_map[map_key].result_metadata_list
+        return result_metadata_list
 
     # noinspection DuplicatedCode
-    def update_calibration_image_metadata(self, **kwargs) -> EmptyResponse | ErrorResponse:
-        request: CalibrationImageMetadataUpdateRequest = get_kwarg(
-            kwargs=kwargs,
-            key="request",
-            arg_type=CalibrationImageMetadataUpdateRequest)
+    def update_calibration_image_metadata(
+        self,
+        image_identifier: str,
+        image_state: CalibrationImageState,
+        image_label: str
+    ) -> None:
         found_count: int = 0
         for map_key in self._calibration_map:
             for image in self._calibration_map[map_key].image_metadata_list:
-                if image.identifier == request.image_identifier:
-                    image.state = request.image_state
-                    image.label = request.image_label
+                if image.identifier == image_identifier:
+                    image.state = image_state
+                    image.label = image_label
                     found_count += 1
                     break
         if found_count < 1:
-            return ErrorResponse(
-                message=f"Image identifier {request.image_identifier} is not associated with any image.")
+            raise MCTDetectorRuntimeError(
+                message=f"Image identifier {image_identifier} is not associated with any image.")
         elif found_count > 1:
             self._status_message_source.enqueue_status_message(
                 severity="warning",
-                message=f"Image identifier {request.image_identifier} is associated with multiple images.")
+                message=f"Image identifier {image_identifier} is associated with multiple images.")
         self._calibration_map_save()
-        return EmptyResponse()
 
     # noinspection DuplicatedCode
-    def update_calibration_result_metadata(self, **kwargs) -> EmptyResponse | ErrorResponse:
-        request: CalibrationResultMetadataUpdateRequest = get_kwarg(
-            kwargs=kwargs,
-            key="request",
-            arg_type=CalibrationResultMetadataUpdateRequest)
+    def update_calibration_result_metadata(
+        self,
+        result_identifier: str,
+        result_state: CalibrationResultState
+    ) -> None:
         found_count: int = 0
         for map_key in self._calibration_map:
             for result in self._calibration_map[map_key].result_metadata_list:
-                if result.identifier == request.result_identifier:
-                    result.state = request.result_state
+                if result.identifier == result_identifier:
+                    result.state = result_state
                     found_count += 1
                     break
         if found_count < 1:
-            return ErrorResponse(
-                message=f"Result identifier {request.result_identifier} is not associated with any result.")
+            raise MCTDetectorRuntimeError(
+                message=f"Result identifier {result_identifier} is not associated with any result.")
         elif found_count > 1:
             self._status_message_source.enqueue_status_message(
                 severity="warning",
-                message=f"Result identifier {request.result_identifier} is associated with multiple results.")
+                message=f"Result identifier {result_identifier} is associated with multiple results.")
         self._calibration_map_save()
-        return EmptyResponse()
 
     def _filepath_for_calibration_image(
         self,

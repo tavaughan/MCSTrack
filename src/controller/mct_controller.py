@@ -363,9 +363,9 @@ class MCTController(MCTComponent):
 
     def handle_response_get_calibration_result(
         self,
-        response: CalibrationResultGetResponse
+        response: CalibrationResultGetResponse,
+        detector_label: str
     ) -> None:
-        detector_label: str = response.intrinsic_calibration.detector_serial_identifier
         detector_connection: DetectorConnection = self._get_connection(
             connection_label=detector_label,
             connection_type=DetectorConnection)
@@ -491,7 +491,9 @@ class MCTController(MCTComponent):
             if isinstance(response, AddTargetMarkerResponse):
                 success = True  # we don't currently do anything with this response in this interface
             elif isinstance(response, CalibrationResultGetResponse):
-                self.handle_response_get_calibration_result(response=response)
+                self.handle_response_get_calibration_result(
+                    response=response,
+                    detector_label=response_series.responder)
                 success = True
             elif isinstance(response, CameraParametersGetResponse):
                 self.handle_response_get_capture_properties(

@@ -1,18 +1,12 @@
-from ..api import \
-    CameraParametersGetResponse, \
-    CameraParametersSetRequest
-from ..exceptions import UpdateCaptureError
+from ..exceptions import MCTDetectorRuntimeError
 from ..interfaces import AbstractCameraInterface
 from src.common import \
-    EmptyResponse, \
-    ErrorResponse, \
-    get_kwarg, \
-    MCTResponse, \
     StandardResolutions
 from src.common.structures import \
     CaptureStatus, \
     ImageResolution, \
     KeyValueSimpleAbstract, \
+    KeyValueSimpleAny, \
     KeyValueSimpleBool, \
     KeyValueSimpleString, \
     KeyValueSimpleFloat, \
@@ -107,7 +101,7 @@ class USBWebcamWithOpenCV(AbstractCameraInterface):
             message: str = "Failed to grab frame."
             self._capture_status.errors.append(message)
             self._capture_status.status = CaptureStatus.Status.FAILURE
-            raise UpdateCaptureError(severity="error", message=message)
+            raise MCTDetectorRuntimeError(message=message)
 
         retrieved_frame: bool
         retrieved_frame, self._captured_image = self._capture.retrieve()
@@ -116,28 +110,20 @@ class USBWebcamWithOpenCV(AbstractCameraInterface):
             logger.error(message)
             self._capture_status.errors.append(message)
             self._capture_status.status = CaptureStatus.Status.FAILURE
-            raise UpdateCaptureError(severity="error", message=message)
+            raise MCTDetectorRuntimeError(message=message)
 
         self._captured_timestamp_utc = datetime.datetime.utcnow()
 
     # noinspection DuplicatedCode
-    def set_capture_properties(self, **kwargs) -> EmptyResponse | ErrorResponse:
-        """
-        :key request: SetCapturePropertiesRequest
-        """
-
-        request: CameraParametersSetRequest = get_kwarg(
-            kwargs=kwargs,
-            key="request",
-            arg_type=CameraParametersSetRequest)
+    def set_capture_properties(self, parameters: list[KeyValueSimpleAny]) -> None:
 
         if self._capture is None:
-            return ErrorResponse(message="Capture is None.")
+            raise MCTDetectorRuntimeError(message="Capture is None.")
 
         mismatched_keys: list[str] = list()
 
         key_value: KeyValueSimpleAbstract
-        for key_value in request.parameters:
+        for key_value in parameters:
             if key_value.key == _CAMERA_RESOLUTION_KEY:
                 if not isinstance(key_value, KeyValueSimpleString):
                     mismatched_keys.append(key_value.key)
@@ -188,82 +174,79 @@ class USBWebcamWithOpenCV(AbstractCameraInterface):
                 mismatched_keys.append(key_value.key)
 
         if len(mismatched_keys) > 0:
-            return ErrorResponse(
+            raise MCTDetectorRuntimeError(
                 message=f"The following parameters could not be applied due to key mismatch: {str(mismatched_keys)}")
 
-        return EmptyResponse()
-
-    def get_capture_properties(self, **_kwargs) -> CameraParametersGetResponse | ErrorResponse:
+    def get_capture_properties(self) -> list[KeyValueMetaAbstract]:
         if self._capture is None:
-            return ErrorResponse(
-                message="The capture is not active, and properties cannot be retrieved.")
+            raise MCTDetectorRuntimeError(message="The capture is not active, and properties cannot be retrieved.")
 
-        key_values: list[KeyValueMetaAbstract] = list()
+        return_value: list[KeyValueMetaAbstract] = list()
 
         resolution_str: str = \
             f"{int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH))}x" + \
             f"{int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT))}"
-        key_values.append(KeyValueMetaEnum(
+        return_value.append(KeyValueMetaEnum(
             key=_CAMERA_RESOLUTION_KEY,
             value=resolution_str,
             allowable_values=_CAMERA_RESOLUTION_ALLOWABLE))
 
-        key_values.append(KeyValueMetaFloat(
+        return_value.append(KeyValueMetaFloat(
             key=_CAMERA_FPS_KEY,
             value=self._capture.get(cv2.CAP_PROP_FPS),
             range_minimum=_CAMERA_FPS_RANGE_MINIMUM,
             range_maximum=_CAMERA_FPS_RANGE_MAXIMUM,
             range_step=_CAMERA_FPS_RANGE_STEP))
 
-        key_values.append(KeyValueMetaBool(
+        return_value.append(KeyValueMetaBool(
             key=_CAMERA_AUTO_EXPOSURE_KEY,
             value=bool(round(self._capture.get(cv2.CAP_PROP_AUTO_EXPOSURE)))))
 
         # exposure implementations vary by operating system
         if os.name == "nt":  # Windows
-            key_values.append(KeyValueMetaInt(
+            return_value.append(KeyValueMetaInt(
                 key=_CAMERA_EXPOSURE_KEY,
                 value=int(round(self._capture.get(cv2.CAP_PROP_EXPOSURE))),
                 range_minimum=_CAMERA_EXPOSURE_WINDOWS_RANGE_MINIMUM,
                 range_maximum=_CAMERA_EXPOSURE_WINDOWS_RANGE_MAXIMUM))
         elif os.name == "posix":  # Unix
-            key_values.append(KeyValueMetaInt(
+            return_value.append(KeyValueMetaInt(
                 key=_CAMERA_EXPOSURE_KEY,
                 value=int(round(self._capture.get(cv2.CAP_PROP_EXPOSURE))),
                 range_minimum=_CAMERA_EXPOSURE_UNIX_RANGE_MINIMUM,
                 range_maximum=_CAMERA_EXPOSURE_UNIX_RANGE_MAXIMUM))
 
-        key_values.append(KeyValueMetaInt(
+        return_value.append(KeyValueMetaInt(
             key=_CAMERA_BRIGHTNESS_KEY,
             value=int(round(self._capture.get(cv2.CAP_PROP_BRIGHTNESS))),
             range_minimum=_CAMERA_BRIGHTNESS_RANGE_MINIMUM,
             range_maximum=_CAMERA_BRIGHTNESS_RANGE_MAXIMUM))
 
-        key_values.append(KeyValueMetaInt(
+        return_value.append(KeyValueMetaInt(
             key=_CAMERA_CONTRAST_KEY,
             value=int(round(self._capture.get(cv2.CAP_PROP_CONTRAST))),
             range_minimum=_CAMERA_CONTRAST_RANGE_MINIMUM,
             range_maximum=_CAMERA_CONTRAST_RANGE_MAXIMUM))
 
-        key_values.append(KeyValueMetaInt(
+        return_value.append(KeyValueMetaInt(
             key=_CAMERA_SHARPNESS_KEY,
             value=int(round(self._capture.get(cv2.CAP_PROP_SHARPNESS))),
             range_minimum=_CAMERA_SHARPNESS_RANGE_MINIMUM,
             range_maximum=_CAMERA_SHARPNESS_RANGE_MAXIMUM))
 
-        key_values.append(KeyValueMetaInt(
+        return_value.append(KeyValueMetaInt(
             key=_CAMERA_GAMMA_KEY,
             value=int(round(self._capture.get(cv2.CAP_PROP_GAMMA))),
             range_minimum=_CAMERA_GAMMA_RANGE_MINIMUM,
             range_maximum=_CAMERA_GAMMA_RANGE_MAXIMUM))
 
-        return CameraParametersGetResponse(parameters=key_values)
+        return return_value
 
-    def start_capture(self, **kwargs) -> MCTResponse:
+    def start_capture(self) -> None:
         if isinstance(self._capture_device_id, str) and self._capture_device_id.isnumeric():
             self._capture_device_id.isnumeric = int(self._capture_device_id)
         if self._capture is not None:
-            return EmptyResponse()
+            return
 
         self._capture = self._detect_os_and_open_video(self._capture_device_id)
         # NOTE: The USB3 cameras bought for this project appear to require some basic parameters to be set,
@@ -286,11 +269,9 @@ class USBWebcamWithOpenCV(AbstractCameraInterface):
         self._capture.set(cv2.CAP_PROP_GAMMA, float(_CAMERA_GAMMA_DEFAULT))
 
         self._capture_status.status = CaptureStatus.Status.RUNNING
-        return EmptyResponse()
 
-    def stop_capture(self, **kwargs) -> MCTResponse:
+    def stop_capture(self) -> None:
         if self._capture is not None:
             self._capture.release()
             self._capture = None
         self._capture_status.status = CaptureStatus.Status.STOPPED
-        return EmptyResponse()

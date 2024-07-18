@@ -70,7 +70,7 @@ def create_app() -> FastAPI:
 
     @detector_app.get("/get_capture_image")
     async def get_capture_image() -> CameraImageGetResponse:
-        result: CameraImageGetResponse = detector.get_capture_image(
+        result: CameraImageGetResponse = detector.camera_image_get(
             request=CameraImageGetRequest(format=".png"))
         image_bytes = base64.b64decode(result.image_base64)
         with open("test.png", "wb") as image_file:
@@ -79,25 +79,25 @@ def create_app() -> FastAPI:
 
     @detector_app.get("/get_capture_properties")
     async def get_capture_properties() -> CameraParametersGetResponse:
-        result: CameraParametersGetResponse = detector.get_capture_properties()
+        result: CameraParametersGetResponse = detector.camera_parameters_get()
         return result
 
     @detector_app.get("/get_detection_parameters")
     async def get_detection_parameters() -> MarkerParametersGetResponse | ErrorResponse:
-        return detector.get_detection_parameters()
+        return detector.marker_parameters_get()
 
     @detector_app.post("/get_marker_snapshots")
     async def get_marker_snapshots(
         request: DetectorFrameGetRequest
     ) -> DetectorFrameGetResponse:
-        return detector.get_marker_snapshots(
+        return detector.detector_frame_get(
             request=request)
 
     @detector_app.post("/set_detection_parameters")
     async def set_detection_parameters(
         request: MarkerParametersSetRequest
     ) -> EmptyResponse | ErrorResponse:
-        return detector.set_detection_parameters(
+        return detector.marker_parameters_set(
             request=request)
 
     @detector_app.head("/start_capture")
@@ -105,14 +105,14 @@ def create_app() -> FastAPI:
         http_request: Request
     ) -> None:
         client_identifier: str = client_identifier_from_connection(connection=http_request)
-        detector.start_capture(client_identifier=client_identifier)
+        detector.detector_start(client_identifier=client_identifier)
 
     @detector_app.head("/stop_capture")
     async def stop_capture(
         http_request: Request
     ) -> None:
         client_identifier: str = client_identifier_from_connection(connection=http_request)
-        detector.stop_capture(client_identifier=client_identifier)
+        detector.detector_stop(client_identifier=client_identifier)
 
     @detector_app.websocket("/websocket")
     async def websocket_handler(websocket: WebSocket) -> None:
