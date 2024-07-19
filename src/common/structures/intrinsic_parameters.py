@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+import math
 
 
 class IntrinsicParameters(BaseModel):
@@ -46,3 +47,24 @@ class IntrinsicParameters(BaseModel):
             self.tangential_distortion_coefficients[1]]
         coefficients += self.radial_distortion_coefficients[2:]
         return coefficients
+
+    @staticmethod
+    def generate_zero_parameters(
+        resolution_x_px: int,
+        resolution_y_px: int,
+        fov_x_degrees: float = 45.0,
+        fov_y_degrees: float = 45.0
+    ) -> "IntrinsicParameters":
+        optical_center_x_px: int = int(round(resolution_x_px/2.0))
+        fov_x_radians: float = fov_x_degrees * math.pi / 180.0
+        focal_length_x_px = (resolution_x_px / 2.0) / math.tan(fov_x_radians / 2.0)
+        optical_center_y_px: int = int(round(resolution_y_px/2.0))
+        fov_y_radians: float = fov_y_degrees * math.pi / 180.0
+        focal_length_y_px = (resolution_y_px / 2.0) / math.tan(fov_y_radians / 2.0)
+        return IntrinsicParameters(
+            focal_length_x_px=focal_length_x_px,
+            focal_length_y_px=focal_length_y_px,
+            optical_center_x_px=optical_center_x_px,
+            optical_center_y_px=optical_center_y_px,
+            radial_distortion_coefficients=[0.0, 0.0, 0.0],
+            tangential_distortion_coefficients=[0.0, 0.0])

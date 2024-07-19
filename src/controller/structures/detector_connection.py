@@ -12,19 +12,21 @@ from src.common.structures import \
     IntrinsicParameters, \
     MarkerSnapshot
 from src.detector.api import \
-    CalibrationImageAddResponse, \
     CalibrationCalculateResponse, \
+    CalibrationImageAddResponse, \
+    CalibrationImageGetResponse, \
+    CalibrationImageMetadataListResponse, \
+    CalibrationResolutionListResponse, \
+    CalibrationResultGetResponse, \
+    CalibrationResultGetActiveResponse, \
+    CalibrationResultMetadataListResponse, \
     CameraImageGetResponse, \
     CameraParametersGetResponse, \
-    MarkerParametersGetResponse, \
+    CameraResolutionGetResponse, \
     DetectorFrameGetResponse, \
-    CalibrationImageGetResponse, \
-    CalibrationResultGetResponse, \
-    CalibrationResolutionListResponse, \
-    CalibrationImageMetadataListResponse, \
-    CalibrationResultMetadataListResponse, \
     DetectorStartRequest, \
-    DetectorStopRequest
+    DetectorStopRequest, \
+    MarkerParametersGetResponse
 import datetime
 import uuid
 
@@ -33,8 +35,6 @@ class DetectorConnection(Connection):
 
     # These are variables used directly by the MCTController for storing data
     request_id: uuid.UUID | None
-    calibration_result_identifier: str | None
-    calibrated_resolutions: list[ImageResolution] | None
     current_resolution: ImageResolution | None
     current_intrinsic_parameters: IntrinsicParameters | None
     detected_marker_snapshots: list[MarkerSnapshot]
@@ -47,8 +47,6 @@ class DetectorConnection(Connection):
     ):
         super().__init__(component_address=component_address)
         self.request_id = None
-        self.calibration_result_identifier = None
-        self.calibrated_resolutions = None
         self.current_resolution = None
         self.current_intrinsic_parameters = None
         self.detected_marker_snapshots = list()
@@ -99,9 +97,11 @@ class DetectorConnection(Connection):
             CalibrationImageMetadataListResponse,
             CalibrationResolutionListResponse,
             CalibrationResultGetResponse,
+            CalibrationResultGetActiveResponse,
             CalibrationResultMetadataListResponse,
             CameraImageGetResponse,
             CameraParametersGetResponse,
+            CameraResolutionGetResponse,
             DequeueStatusMessagesResponse,
             DetectorFrameGetResponse,
             EmptyResponse,

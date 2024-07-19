@@ -19,20 +19,15 @@ from src.common.structures import \
     COMPONENT_ROLE_LABEL_DETECTOR, \
     COMPONENT_ROLE_LABEL_POSE_SOLVER, \
     DetectorFrame, \
-    ImageResolution, \
     IntrinsicParameters, \
     PoseSolverFrame
 from src.detector.api import \
-    CalibrationResultGetRequest, \
-    CalibrationResultGetResponse, \
-    CameraParametersGetRequest, \
-    CameraParametersGetResponse, \
+    CalibrationResultGetActiveRequest, \
+    CalibrationResultGetActiveResponse, \
+    CameraResolutionGetRequest, \
+    CameraResolutionGetResponse, \
     DetectorFrameGetRequest, \
-    DetectorFrameGetResponse, \
-    CalibrationResolutionListRequest, \
-    CalibrationResolutionListResponse, \
-    CalibrationResultMetadataListRequest, \
-    CalibrationResultMetadataListResponse
+    DetectorFrameGetResponse
 from src.pose_solver.api import \
     AddTargetMarkerResponse, \
     AddMarkerCornersRequest, \
@@ -120,70 +115,11 @@ class MCTController(MCTComponent):
             for detector_label in detector_labels:
                 request_series: MCTRequestSeries = MCTRequestSeries(
                     series=[
-                        CalibrationResolutionListRequest(),
-                        CameraParametersGetRequest()])
+                        CameraResolutionGetRequest(),
+                        CalibrationResultGetActiveRequest()])
                 self._pending_request_ids.append(self.request_series_push(
                     connection_label=detector_label,
                     request_series=request_series))
-            self._startup_state = MCTController.StartupState.GET_RESOLUTIONS
-        if len(self._pending_request_ids) <= 0 and self._startup_state == MCTController.StartupState.GET_RESOLUTIONS:
-            self.status_message_source.enqueue_status_message(
-                severity="debug",
-                message="GET_RESOLUTIONS complete")
-            for detector_label in self.get_active_detector_labels():
-                detector_connection: DetectorConnection = self._get_connection(
-                    connection_label=detector_label,
-                    connection_type=DetectorConnection)
-                if detector_connection is None:
-                    self.status_message_source.enqueue_status_message(
-                        severity="error",
-                        message=f"Failed to find DetectorConnection with label {detector_label}.")
-                    continue
-                if detector_connection.current_resolution is None:
-                    self.status_message_source.enqueue_status_message(
-                        severity="error",
-                        message=f"DetectorConnection with label {detector_label} doesn't have a resolution.")
-                    continue
-                requests: list[MCTRequest] = list()
-                found_target_resolution: bool = False
-                for detector_resolution in detector_connection.calibrated_resolutions:
-                    if detector_resolution == detector_connection.current_resolution:
-                        requests.append(
-                            CalibrationResultMetadataListRequest(
-                                image_resolution=detector_connection.current_resolution))
-                        found_target_resolution = True
-                if not found_target_resolution:
-                    self.status_message_source.enqueue_status_message(
-                        severity="error",
-                        message=f"No calibration available for detector {detector_label} "
-                                f"at resolution {str(detector_connection.current_resolution)}. "
-                                "No intrinsics will be set.")
-                request_series: MCTRequestSeries = MCTRequestSeries(series=requests)
-                self._pending_request_ids.append(self.request_series_push(
-                    connection_label=detector_label,
-                    request_series=request_series))
-            self._startup_state = MCTController.StartupState.LIST_INTRINSICS
-        if len(self._pending_request_ids) <= 0 and self._startup_state == MCTController.StartupState.LIST_INTRINSICS:
-            self.status_message_source.enqueue_status_message(
-                severity="debug",
-                message="LIST_INTRINSICS complete")
-            for detector_label in self.get_active_detector_labels():
-                detector_connection: DetectorConnection = self._get_connection(
-                    connection_label=detector_label,
-                    connection_type=DetectorConnection)
-                if detector_connection is None:
-                    self.status_message_source.enqueue_status_message(
-                        severity="error",
-                        message=f"Failed to find DetectorConnection with label {detector_label}.")
-                    continue
-                if detector_connection.calibration_result_identifier is not None:
-                    request_series: MCTRequestSeries = MCTRequestSeries(
-                        series=[
-                            CalibrationResultGetRequest(
-                                result_identifier=detector_connection.calibration_result_identifier)])
-                    self._pending_request_ids.append(self.request_series_push(
-                        connection_label=detector_label,
-                        request_series=request_series))
             self._startup_state = MCTController.StartupState.GET_INTRINSICS
         if len(self._pending_request_ids) <= 0 and self._startup_state == MCTController.StartupState.GET_INTRINSICS:
             self.status_message_source.enqueue_status_message(
@@ -335,9 +271,9 @@ class MCTController(MCTComponent):
             severity="error",
             message=f"Received error: {response.message}")
 
-    def handle_response_get_capture_properties(
+    def handle_response_calibration_result_get_active(
         self,
-        response: CameraParametersGetResponse,
+        response: CalibrationResultGetActiveResponse,
         detector_label: str
     ) -> None:
         detector_connection: DetectorConnection = self._get_connection(
@@ -348,34 +284,38 @@ class MCTController(MCTComponent):
                 severity="error",
                 message=f"Failed to find DetectorConnection with label {detector_label}.")
             return
-        # TODO: The code below will be rendered obsolete once the communications are refactored such that
-        #       the Detector provides us with the current resolution without being explicitly asked for it.
-        for key_value in response.parameters:
-            if key_value.key == "Resolution":  # Hard-coded key that will be removed in a future revision
-                detector_connection.current_resolution = ImageResolution.from_str(key_value.value)
+        if response.intrinsic_calibration is None:
+            if detector_connection.current_resolution is None:
+                self.status_message_source.enqueue_status_message(
+                    severity="error",
+                    message=f"No calibration was found for detector {detector_label}, and failed to get resolution.")
                 return
-        if detector_connection.current_resolution is None:
             self.status_message_source.enqueue_status_message(
-                severity="error",
-                message=f"Failed to find resolution of DetectorConnection with label {detector_label}.")
-            return
-
-    def handle_response_get_calibration_result(
-        self,
-        response: CalibrationResultGetResponse,
-        detector_label: str
-    ) -> None:
-        detector_connection: DetectorConnection = self._get_connection(
-            connection_label=detector_label,
-            connection_type=DetectorConnection)
-        if detector_connection is None:
-            self.status_message_source.enqueue_status_message(
-                severity="error",
-                message=f"Failed to find DetectorConnection with label {detector_label}.")
+                severity="warning",
+                message=f"No calibration was found for detector {detector_label}. "
+                        f"Zero parameters for active resolution {detector_connection.current_resolution} will be used.")
+            detector_connection.current_intrinsic_parameters = IntrinsicParameters.generate_zero_parameters(
+                resolution_x_px=detector_connection.current_resolution.x_px,
+                resolution_y_px=detector_connection.current_resolution.y_px)
             return
         detector_connection.current_intrinsic_parameters = response.intrinsic_calibration.calibrated_values
 
-    def handle_response_get_marker_snapshots(
+    def handle_response_camera_resolution_get(
+        self,
+        response: CameraResolutionGetResponse,
+        detector_label: str
+    ) -> None:
+        detector_connection: DetectorConnection = self._get_connection(
+            connection_label=detector_label,
+            connection_type=DetectorConnection)
+        if detector_connection is None:
+            self.status_message_source.enqueue_status_message(
+                severity="error",
+                message=f"Failed to find DetectorConnection with label {detector_label}.")
+            return
+        detector_connection.current_resolution = response.resolution
+
+    def handle_response_detector_frame_get(
         self,
         response: DetectorFrameGetResponse,
         detector_label: str
@@ -410,46 +350,6 @@ class MCTController(MCTComponent):
         pose_solver_connection.target_poses = response.target_poses
         pose_solver_connection.poses_timestamp = \
             datetime.datetime.utcnow()  # TODO: This should come from the pose solver
-
-    def handle_response_list_calibration_detector_resolutions(
-        self,
-        response: CalibrationResolutionListResponse,
-        detector_label: str
-    ) -> None:
-        detector_connection: DetectorConnection = self._get_connection(
-            connection_label=detector_label,
-            connection_type=DetectorConnection)
-        if detector_connection is None:
-            self.status_message_source.enqueue_status_message(
-                severity="error",
-                message=f"Failed to find DetectorConnection with label {detector_label}.")
-            return
-        detector_connection.calibrated_resolutions = response.resolutions
-
-    def handle_response_list_calibration_result_metadata(
-        self,
-        response: CalibrationResultMetadataListResponse,
-        detector_label: str
-    ) -> None:
-        if len(response.metadata_list) <= 0:
-            self.status_message_source.enqueue_status_message(
-                severity="error",
-                message=f"No calibration was available for detector {detector_label}. No intrinsics will be set.")
-            return
-        newest_result_id: str = response.metadata_list[0].identifier  # placeholder, maybe
-        newest_timestamp: datetime.datetime = datetime.datetime.min
-        for result_metadata in response.metadata_list:
-            if result_metadata.timestamp_utc() > newest_timestamp:
-                newest_result_id = result_metadata.identifier
-        detector_connection: DetectorConnection = self._get_connection(
-            connection_label=detector_label,
-            connection_type=DetectorConnection)
-        if detector_connection is None:
-            self.status_message_source.enqueue_status_message(
-                severity="error",
-                message=f"Failed to find DetectorConnection with label {detector_label}.")
-            return
-        detector_connection.calibration_result_identifier = newest_result_id
 
     def handle_response_unknown(
         self,
@@ -487,36 +387,23 @@ class MCTController(MCTComponent):
         response: MCTResponse
         for response in response_series.series:
             if isinstance(response, AddTargetMarkerResponse):
-                success = True  # we don't currently do anything with this response in this interface
-            elif isinstance(response, CalibrationResultGetResponse):
-                self.handle_response_get_calibration_result(
+                pass  # we don't currently do anything with this response in this interface
+            elif isinstance(response, CalibrationResultGetActiveResponse):
+                self.handle_response_calibration_result_get_active(
                     response=response,
                     detector_label=response_series.responder)
-                success = True
-            elif isinstance(response, CameraParametersGetResponse):
-                self.handle_response_get_capture_properties(
+            elif isinstance(response, CameraResolutionGetResponse):
+                self.handle_response_camera_resolution_get(
                     response=response,
                     detector_label=response_series.responder)
-                success = True
             elif isinstance(response, DetectorFrameGetResponse):
-                self.handle_response_get_marker_snapshots(
+                self.handle_response_detector_frame_get(
                     response=response,
                     detector_label=response_series.responder)
             elif isinstance(response, GetPosesResponse):
                 self.handle_response_get_poses(
                     response=response,
                     pose_solver_label=response_series.responder)
-                success = True
-            elif isinstance(response, CalibrationResolutionListResponse):
-                self.handle_response_list_calibration_detector_resolutions(
-                    response=response,
-                    detector_label=response_series.responder)
-                success = True
-            elif isinstance(response, CalibrationResultMetadataListResponse):
-                self.handle_response_list_calibration_result_metadata(
-                    response=response,
-                    detector_label=response_series.responder)
-                success = True
             elif isinstance(response, ErrorResponse):
                 self.handle_error_response(response=response)
                 success = False
