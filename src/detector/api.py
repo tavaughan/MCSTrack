@@ -23,7 +23,6 @@ class CalibrationCalculateRequest(MCTRequest):
         return "detector_calibration_calculate"
 
     parsable_type: str = Field(default=parsable_type_identifier(), const=True)
-    detector_serial_identifier: str = Field()
     image_resolution: ImageResolution = Field()
 
 
@@ -55,7 +54,6 @@ class CalibrationImageAddRequest(MCTRequest):
 
     parsable_type: str = Field(default=parsable_type_identifier(), const=True)
 
-    detector_serial_identifier: str = Field()
     format: CaptureFormat = Field()
     image_base64: str = Field()
 
@@ -93,7 +91,6 @@ class CalibrationImageMetadataListRequest(MCTRequest):
         return "detector_calibration_image_metadata_list"
 
     parsable_type: str = Field(default=parsable_type_identifier(), const=True)
-    detector_serial_identifier: str = Field()
     image_resolution: ImageResolution = Field()
 
 
@@ -158,7 +155,6 @@ class CalibrationResultMetadataListRequest(MCTRequest):
         return "detector_calibration_result_metadata_list"
 
     parsable_type: str = Field(default=parsable_type_identifier(), const=True)
-    detector_serial_identifier: str = Field()
     image_resolution: ImageResolution = Field()
 
 

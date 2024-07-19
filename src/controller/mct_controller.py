@@ -150,7 +150,6 @@ class MCTController(MCTComponent):
                     if detector_resolution == detector_connection.current_resolution:
                         requests.append(
                             CalibrationResultMetadataListRequest(
-                                detector_serial_identifier=detector_label,
                                 image_resolution=detector_connection.current_resolution))
                         found_target_resolution = True
                 if not found_target_resolution:

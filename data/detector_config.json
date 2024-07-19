@@ -1,8 +1,8 @@
 {
   "serial_identifier": "example_detector",
-  "camera_implementation": "picamera",
+  "camera_implementation": "opencv",
   "camera_connection": {
-    "usb_id": 0
+    "usb_id": 2
   },
   "camera_intrinsic_parameters": {},
   "calibrator_configuration": {

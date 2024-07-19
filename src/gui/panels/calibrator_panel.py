@@ -395,10 +395,8 @@ class CalibratorPanel(BasePanel):
             ImageResolution.from_str(self._detector_resolution_selector.selector.GetStringSelection())
         request_series: MCTRequestSeries = MCTRequestSeries(series=[
             CalibrationCalculateRequest(
-                detector_serial_identifier=selected_detector_label,
                 image_resolution=selected_image_resolution),
             CalibrationResultMetadataListRequest(
-                detector_serial_identifier=selected_detector_label,
                 image_resolution=selected_image_resolution)])
         self._control_blocking_request_id = self._controller.request_series_push(
             connection_label=selected_detector_label,
@@ -429,10 +427,8 @@ class CalibratorPanel(BasePanel):
             ImageResolution.from_str(self._detector_resolution_selector.selector.GetStringSelection())
         request_series: MCTRequestSeries = MCTRequestSeries(series=[
             CalibrationImageMetadataListRequest(
-                detector_serial_identifier=selected_detector_label,
                 image_resolution=selected_image_resolution),
             CalibrationResultMetadataListRequest(
-                detector_serial_identifier=selected_detector_label,
                 image_resolution=selected_image_resolution)])
         self._control_blocking_request_id = self._controller.request_series_push(
             connection_label=selected_detector_label,
@@ -485,7 +481,6 @@ class CalibratorPanel(BasePanel):
                 image_label=image_label),
             CalibrationDeleteStagedRequest(),
             CalibrationImageMetadataListRequest(
-                detector_serial_identifier=detector_label,
                 image_resolution=image_resolution)])
         self._control_blocking_request_id = self._controller.request_series_push(
             connection_label=detector_label,
@@ -522,7 +517,6 @@ class CalibratorPanel(BasePanel):
                 result_state=result_state),
             CalibrationDeleteStagedRequest(),
             CalibrationResultMetadataListRequest(
-                detector_serial_identifier=detector_label,
                 image_resolution=image_resolution)])
         self._control_blocking_request_id = self._controller.request_series_push(
             connection_label=detector_label,
