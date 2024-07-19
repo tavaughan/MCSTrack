@@ -244,6 +244,8 @@ class Calibrator:
         result_metadata: CalibrationResultMetadata = CalibrationResultMetadata(
             identifier=result_identifier,
             image_identifiers=image_identifiers)
+        if len(self._calibration_map[calibration_key].result_metadata_list) == 0:
+            result_metadata.state = CalibrationResultState.ACTIVE  # No active result yet, so make this one active
         self._calibration_map[calibration_key].result_metadata_list.append(result_metadata)
         self.save()
         return result_identifier, intrinsic_calibration
@@ -406,7 +408,7 @@ class Calibrator:
         elif active_count > 1:
             self._status_message_source.enqueue_status_message(
                 severity="warning",
-                message=f"Multiple result metadata are active for resolution {str(image_resolution)}."
+                message=f"Multiple result metadata are active for resolution {str(image_resolution)}. "
                         "Returning latest active result. "
                         "To recover from this ambiguous state, it is strong recommended to explicitly set "
                         "one of the results as \"active\", which will reset others to \"retain\".")
@@ -554,14 +556,15 @@ class Calibrator:
         self,
         image_identifier: str,
         image_state: CalibrationImageState,
-        image_label: str
+        image_label: str | None
     ) -> None:
         found_count: int = 0
         for map_key in self._calibration_map:
             for image in self._calibration_map[map_key].image_metadata_list:
                 if image.identifier == image_identifier:
                     image.state = image_state
-                    image.label = image_label
+                    if image_label is not None:
+                        image.label = image_label
                     found_count += 1
                     break
         if found_count < 1:
@@ -577,20 +580,38 @@ class Calibrator:
     def update_result_metadata(
         self,
         result_identifier: str,
-        result_state: CalibrationResultState
+        result_state: CalibrationResultState,
+        result_label: str | None = None
     ) -> None:
         found_count: int = 0
+        matching_map_keys: set[ImageResolution] = set()  # Normally this shall be of size exactly 1
         for map_key in self._calibration_map:
             for result in self._calibration_map[map_key].result_metadata_list:
                 if result.identifier == result_identifier:
                     result.state = result_state
+                    if result_label is not None:
+                        result.label = result_label
                     found_count += 1
+                    matching_map_keys.add(map_key)
                     break
+
+        # Some cleanup as applicable
+        if result_state == CalibrationResultState.ACTIVE:
+            for map_key in matching_map_keys:
+                # If size greater than 1, something is wrong... but nonetheless
+                # we'll ensure there is only one active result per resolution
+                for result in self._calibration_map[map_key].result_metadata_list:
+                    if result.identifier != result_identifier and result.state == CalibrationResultState.ACTIVE:
+                        result.state = CalibrationResultState.RETAIN
+
         if found_count < 1:
             raise MCTDetectorRuntimeError(
                 message=f"Result identifier {result_identifier} is not associated with any result.")
         elif found_count > 1:
             self._status_message_source.enqueue_status_message(
                 severity="warning",
-                message=f"Result identifier {result_identifier} is associated with multiple results.")
+                message=f"Result identifier {result_identifier} is associated with multiple results. "
+                        "This suggests that the calibration map is in an inconsistent state. "
+                        "It may be prudent to either manually correct it, or recreate it.")
+
         self.save()

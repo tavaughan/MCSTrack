@@ -232,13 +232,13 @@ class CalibratorPanel(BasePanel):
         control_border_panel.SetSizer(sizer=control_border_box)
         horizontal_split_sizer.Add(
             window=control_border_panel,
-            flags=wx.SizerFlags(35).Expand())
+            flags=wx.SizerFlags(50).Expand())
 
         self._image_panel = ImagePanel(parent=self)
         self._image_panel.SetBackgroundColour(colour=wx.BLACK)
         horizontal_split_sizer.Add(
             window=self._image_panel,
-            flags=wx.SizerFlags(65).Expand())
+            flags=wx.SizerFlags(50).Expand())
 
         self.SetSizerAndFit(sizer=horizontal_split_sizer)
 
@@ -511,10 +511,12 @@ class CalibratorPanel(BasePanel):
         result_identifier: str = self._result_metadata_list[result_index].identifier
         result_state: CalibrationResultState = \
             CalibrationResultState[self._result_state_selector.selector.GetStringSelection()]
+        result_label: str = self._result_label_textbox.textbox.GetValue()
         request_series: MCTRequestSeries = MCTRequestSeries(series=[
             CalibrationResultMetadataUpdateRequest(
                 result_identifier=result_identifier,
-                result_state=result_state),
+                result_state=result_state,
+                result_label=result_label),
             CalibrationDeleteStagedRequest(),
             CalibrationResultMetadataListRequest(
                 image_resolution=image_resolution)])
@@ -601,4 +603,3 @@ class CalibratorPanel(BasePanel):
         self.Layout()
         self.Refresh()
         self.Update()
-

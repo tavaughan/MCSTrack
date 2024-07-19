@@ -221,7 +221,8 @@ class Detector(MCTComponent):
         try:
             self._calibrator.update_result_metadata(
                 result_identifier=request.result_identifier,
-                result_state=request.result_state)
+                result_state=request.result_state,
+                result_label=request.result_label)
         except MCTDetectorRuntimeError as e:
             return ErrorResponse(message=e.message)
         return EmptyResponse()

@@ -111,7 +111,7 @@ class CalibrationImageMetadataUpdateRequest(MCTRequest):
     parsable_type: str = Field(default=parsable_type_identifier(), const=True)
     image_identifier: str = Field()
     image_state: CalibrationImageState = Field()
-    image_label: str = Field()
+    image_label: str | None = Field(default=None)
 
 
 class CalibrationResolutionListRequest(MCTRequest):
@@ -192,6 +192,7 @@ class CalibrationResultMetadataUpdateRequest(MCTRequest):
     parsable_type: str = Field(default=parsable_type_identifier(), const=True)
     result_identifier: str = Field()
     result_state: CalibrationResultState = Field()
+    result_label: str | None = Field(default=None)
 
 
 class CameraImageGetRequest(MCTRequest):
