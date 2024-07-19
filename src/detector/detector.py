@@ -121,13 +121,10 @@ class Detector(MCTComponent):
             return ErrorResponse(message=e.message)
         return EmptyResponse()
 
-    def calibration_image_add(self, **kwargs) -> CalibrationImageAddResponse | ErrorResponse:
-        request: CalibrationImageAddRequest = get_kwarg(
-            kwargs=kwargs,
-            key="request",
-            arg_type=CalibrationImageAddRequest)
+    def calibration_image_add(self, **_kwargs) -> CalibrationImageAddResponse | ErrorResponse:
         try:
-            image_identifier: str = self._calibrator.add_image(image_base64=request.image_base64)
+            image_base64: str = self._camera.get_encoded_image(image_format=".png")
+            image_identifier: str = self._calibrator.add_image(image_base64=image_base64)
         except MCTDetectorRuntimeError as e:
             return ErrorResponse(message=e.message)
         return CalibrationImageAddResponse(image_identifier=image_identifier)

@@ -610,20 +610,9 @@ class DetectorPanel(BasePanel):
         self._update_ui_controls()
 
     def begin_capture_calibration(self) -> None:
-        # TODO: THIS NEEDS TO BE IN LOSSLESS (.PNG) FORMAT!!!
         selected_detector_label: str = self._detector_selector.selector.GetStringSelection()
-        if self._live_image_base64 is None or len(self._live_image_base64) <= 0:
-            self.status_message_source.enqueue_status_message(
-                severity="error",
-                message=f"Requested to add a calibration image but there is no live image. Returning.")
-            return
-        request_series: MCTRequestSeries = MCTRequestSeries(
-            series=[
-                CalibrationImageAddRequest(
-                    detector_serial_identifier=selected_detector_label,
-                    format=_CAPTURE_FORMAT,
-                    image_base64=self._live_image_base64)])
-        self._live_preview_request_id = self._controller.request_series_push(
+        request_series: MCTRequestSeries = MCTRequestSeries(series=[CalibrationImageAddRequest()])
+        self._control_blocking_request_id = self._controller.request_series_push(
             connection_label=selected_detector_label,
             request_series=request_series)
         self._update_ui_controls()

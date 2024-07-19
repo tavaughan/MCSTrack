@@ -45,17 +45,11 @@ class CalibrationDeleteStagedRequest(MCTRequest):
 
 
 class CalibrationImageAddRequest(MCTRequest):
-    """
-    Calibrator will infer resolution from the image itself, and associate its own label to the data.
-    """
     @staticmethod
     def parsable_type_identifier() -> str:
         return "detector_calibration_image_add"
 
     parsable_type: str = Field(default=parsable_type_identifier(), const=True)
-
-    format: CaptureFormat = Field()
-    image_base64: str = Field()
 
 
 class CalibrationImageAddResponse(MCTResponse):
