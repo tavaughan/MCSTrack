@@ -39,7 +39,7 @@ class CalibrationResultTable(RowSelectionTable[CalibrationResultMetadata]):
         self.table.SetCellValue(
             row=row_index,
             col=_COL_IDX_TIMESTAMP,
-            s=str(row_content.timestamp_utc))
+            s=str(row_content.timestamp_utc_iso8601))
         self.table.SetCellValue(
             row=row_index,
             col=_COL_IDX_STATUS,

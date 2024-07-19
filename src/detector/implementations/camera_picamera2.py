@@ -5,6 +5,7 @@ from ..structures import \
     CameraStatus
 from src.common import StatusMessageSource
 from src.common.structures import \
+    ImageResolution, \
     KeyValueSimpleAbstract, \
     KeyValueSimpleAny, \
     KeyValueSimpleBool, \
@@ -28,6 +29,8 @@ _RANGE_MINIMUM_INDEX: Final[int] = 0
 _RANGE_MAXIMUM_INDEX: Final[int] = 1
 _RANGE_DEFAULT_INDEX: Final[int] = 2
 _MICROSECONDS_PER_SECOND: Final[int] = 1000000
+
+_CAMERA_RESOLUTION_KEY: Final[str] = "size"
 
 _CAMERA_CONTROLS_KEY: Final[str] = "controls"
 _CAMERA_FPS_KEY: Final[str] = "FramesPerSecond"
@@ -100,6 +103,10 @@ class Picamera2Camera(AbstractCamera):
         if self._image is None:
             raise MCTDetectorRuntimeError(message="There is no captured image.")
         return self._image
+
+    def get_resolution(self) -> ImageResolution:
+        resolution: tuple[int, int] = self._camera_configuration[_CAMERA_RESOLUTION_KEY]
+        return ImageResolution(x_px=resolution[0], y_px=resolution[1])
 
     def get_parameters(self, **_kwargs) -> list[KeyValueMetaAbstract]:
         if self.get_status() != CameraStatus.RUNNING:

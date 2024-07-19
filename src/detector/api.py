@@ -149,6 +149,23 @@ class CalibrationResultGetResponse(MCTResponse):
     intrinsic_calibration: IntrinsicCalibration = Field()
 
 
+class CalibrationResultGetActiveRequest(MCTRequest):
+    @staticmethod
+    def parsable_type_identifier() -> str:
+        return "detector_calibration_result_active_get"
+
+    parsable_type: str = Field(default=parsable_type_identifier(), const=True)
+
+
+class CalibrationResultGetActiveResponse(MCTResponse):
+    @staticmethod
+    def parsable_type_identifier() -> str:
+        return "detector_calibration_result_active_get"
+
+    parsable_type: str = Field(default=parsable_type_identifier(), const=True)
+    intrinsic_calibration: IntrinsicCalibration | None = Field()
+
+
 class CalibrationResultMetadataListRequest(MCTRequest):
     @staticmethod
     def parsable_type_identifier() -> str:

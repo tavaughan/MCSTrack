@@ -13,6 +13,8 @@ from .api import \
     CalibrationResolutionListResponse, \
     CalibrationResultGetRequest, \
     CalibrationResultGetResponse, \
+    CalibrationResultGetActiveRequest, \
+    CalibrationResultGetActiveResponse, \
     CalibrationResultMetadataListRequest, \
     CalibrationResultMetadataListResponse, \
     CalibrationResultMetadataUpdateRequest, \
@@ -187,6 +189,15 @@ class Detector(MCTComponent):
             return ErrorResponse(message=e.message)
         return CalibrationResultGetResponse(intrinsic_calibration=intrinsic_calibration)
 
+    def calibration_result_get_active(self, **_kwargs) -> CalibrationResultGetActiveResponse | ErrorResponse:
+        intrinsic_calibration: IntrinsicCalibration | None
+        try:
+            image_resolution: ImageResolution = self._camera.get_resolution()
+            intrinsic_calibration = self._calibrator.get_result_active(image_resolution=image_resolution)
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return CalibrationResultGetActiveResponse(intrinsic_calibration=intrinsic_calibration)
+
     def calibration_result_metadata_list(self, **kwargs) -> CalibrationResultMetadataListResponse | ErrorResponse:
         request: CalibrationResultMetadataListRequest = get_kwarg(
             kwargs=kwargs,
@@ -311,6 +322,7 @@ class Detector(MCTComponent):
             CalibrationImageMetadataUpdateRequest: self.calibration_image_metadata_update,
             CalibrationResolutionListRequest: self.calibration_resolution_list,
             CalibrationResultGetRequest: self.calibration_result_get,
+            CalibrationResultGetActiveRequest: self.calibration_result_get_active,
             CalibrationResultMetadataListRequest: self.calibration_result_metadata_list,
             CalibrationResultMetadataUpdateRequest: self.calibration_result_metadata_update,
             CameraImageGetRequest: self.camera_image_get,

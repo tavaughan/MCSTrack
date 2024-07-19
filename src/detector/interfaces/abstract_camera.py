@@ -4,6 +4,7 @@ from ..structures import \
 from src.common import StatusMessageSource
 from src.common.structures import \
     CaptureFormat, \
+    ImageResolution, \
     KeyValueSimpleAny, \
     KeyValueMetaAbstract, \
     SeverityLabel
@@ -67,6 +68,9 @@ class AbstractCamera(abc.ABC):
 
     @abc.abstractmethod
     def get_parameters(self) -> list[KeyValueMetaAbstract]: ...
+
+    @abc.abstractmethod
+    def get_resolution(self) -> ImageResolution: ...
 
     @staticmethod
     @abc.abstractmethod

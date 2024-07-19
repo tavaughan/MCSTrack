@@ -103,6 +103,13 @@ class OpenCVCaptureDeviceCamera(AbstractCamera):
             raise MCTDetectorRuntimeError(message="There is no captured image.")
         return self._image
 
+    def get_resolution(self) -> ImageResolution:
+        if self._capture is None:
+            raise MCTDetectorRuntimeError(message="The camera is not active, and resolution cannot be retrieved.")
+        return ImageResolution(
+            x_px=int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH)),
+            y_px=int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+
     def get_parameters(self) -> list[KeyValueMetaAbstract]:
         if self._capture is None:
             raise MCTDetectorRuntimeError(message="The camera is not active, and properties cannot be retrieved.")

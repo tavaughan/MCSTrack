@@ -6,6 +6,7 @@ from src.detector import \
     Detector, \
     DetectorConfiguration
 from src.detector.api import \
+    CalibrationResultGetActiveResponse, \
     CameraImageGetRequest, \
     CameraImageGetResponse, \
     CameraParametersGetResponse, \
@@ -73,8 +74,33 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"])
 
-    @detector_app.get("/get_capture_image")
-    async def get_capture_image() -> CameraImageGetResponse:
+    @detector_app.head("/detector/start")
+    async def detector_start(
+        http_request: Request
+    ) -> None:
+        client_identifier: str = client_identifier_from_connection(connection=http_request)
+        detector.detector_start(client_identifier=client_identifier)
+
+    @detector_app.head("/detector/stop")
+    async def detector_stop(
+        http_request: Request
+    ) -> None:
+        client_identifier: str = client_identifier_from_connection(connection=http_request)
+        detector.detector_stop(client_identifier=client_identifier)
+
+    @detector_app.post("/detector/get_frame")
+    async def detector_get_frame(
+        request: DetectorFrameGetRequest
+    ) -> DetectorFrameGetResponse:
+        return detector.detector_frame_get(
+            request=request)
+
+    @detector_app.get("/calibration/get_result_active")
+    async def calibration_get_result_active() -> CalibrationResultGetActiveResponse:
+        return detector.calibration_result_get_active()
+
+    @detector_app.get("/camera/get_image")
+    async def camera_get_image() -> CameraImageGetResponse:
         result: CameraImageGetResponse = detector.camera_image_get(
             request=CameraImageGetRequest(format=".png"))
         image_bytes = base64.b64decode(result.image_base64)
@@ -82,42 +108,21 @@ def create_app() -> FastAPI:
             image_file.write(image_bytes)
         return result
 
-    @detector_app.get("/get_capture_properties")
-    async def get_capture_properties() -> CameraParametersGetResponse:
+    @detector_app.get("/camera/get_parameters")
+    async def camera_get_parameters() -> CameraParametersGetResponse:
         result: CameraParametersGetResponse = detector.camera_parameters_get()
         return result
 
-    @detector_app.get("/get_detection_parameters")
-    async def get_detection_parameters() -> MarkerParametersGetResponse | ErrorResponse:
+    @detector_app.get("/marker/get_parameters")
+    async def marker_get_parameters() -> MarkerParametersGetResponse | ErrorResponse:
         return detector.marker_parameters_get()
 
-    @detector_app.post("/get_marker_snapshots")
-    async def get_marker_snapshots(
-        request: DetectorFrameGetRequest
-    ) -> DetectorFrameGetResponse:
-        return detector.detector_frame_get(
-            request=request)
-
-    @detector_app.post("/set_detection_parameters")
-    async def set_detection_parameters(
+    @detector_app.post("/marker/set_parameters")
+    async def marker_set_parameters(
         request: MarkerParametersSetRequest
     ) -> EmptyResponse | ErrorResponse:
         return detector.marker_parameters_set(
             request=request)
-
-    @detector_app.head("/start_capture")
-    async def start_capture(
-        http_request: Request
-    ) -> None:
-        client_identifier: str = client_identifier_from_connection(connection=http_request)
-        detector.detector_start(client_identifier=client_identifier)
-
-    @detector_app.head("/stop_capture")
-    async def stop_capture(
-        http_request: Request
-    ) -> None:
-        client_identifier: str = client_identifier_from_connection(connection=http_request)
-        detector.detector_stop(client_identifier=client_identifier)
 
     @detector_app.websocket("/websocket")
     async def websocket_handler(websocket: WebSocket) -> None:

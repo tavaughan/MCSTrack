@@ -360,13 +360,73 @@ class Calibrator:
             raise MCTDetectorRuntimeError(
                 message=f"Image identifier {result_identifier} is associated with multiple results.")
 
+        return self._get_result_calibration_from_file(
+            image_resolution=matching_image_resolution,
+            result_identifier=result_identifier)
+
+    def get_result_active(
+        self,
+        image_resolution: ImageResolution
+    ) -> IntrinsicCalibration | None:
+        active_count: int = 0
+        matched_metadata: CalibrationResultMetadata | None = None
+        if image_resolution in self._calibration_map:
+            result_count: int = len(self._calibration_map[image_resolution].result_metadata_list)
+            if result_count > 0:
+                matched_metadata = self._calibration_map[image_resolution].result_metadata_list[0]
+                if matched_metadata.state == CalibrationResultState.ACTIVE:
+                    active_count = 1
+                for result_index in range(1, result_count):
+                    result_metadata = self._calibration_map[image_resolution].result_metadata_list[result_index]
+                    if matched_metadata.state == CalibrationResultState.DELETE:
+                        matched_metadata = result_metadata
+                        continue  # basically we ignore any data staged for DELETE
+                    elif matched_metadata.state == CalibrationResultState.RETAIN:
+                        if result_metadata.state == CalibrationResultState.ACTIVE:
+                            active_count += 1
+                            matched_metadata = result_metadata
+                            continue  # ACTIVE shall of course take priority
+                        elif result_metadata.timestamp_utc() > matched_metadata.timestamp_utc():
+                            matched_metadata = result_metadata
+                    else:  # matched_result_metadata.state == CalibrationResultState.ACTIVE:
+                        if result_metadata.state == CalibrationResultState.ACTIVE:
+                            # BOTH metadata are marked ACTIVE. This is not expected to occur. Indicates a problem.
+                            active_count += 1
+                            if result_metadata.timestamp_utc() > matched_metadata.timestamp_utc():
+                                matched_metadata = result_metadata
+        if matched_metadata is None or \
+           matched_metadata.state == CalibrationResultState.DELETE:  # no result that is not marked DELETE
+            return None
+
+        if active_count < 1:
+            self._status_message_source.enqueue_status_message(
+                severity="warning",
+                message=f"No result metadata is active for resolution {str(image_resolution)}."
+                        "Returning latest result.")
+        elif active_count > 1:
+            self._status_message_source.enqueue_status_message(
+                severity="warning",
+                message=f"Multiple result metadata are active for resolution {str(image_resolution)}."
+                        "Returning latest active result. "
+                        "To recover from this ambiguous state, it is strong recommended to explicitly set "
+                        "one of the results as \"active\", which will reset others to \"retain\".")
+
+        return self._get_result_calibration_from_file(
+            image_resolution=image_resolution,
+            result_identifier=matched_metadata.identifier)
+
+    def _get_result_calibration_from_file(
+        self,
+        image_resolution: ImageResolution,
+        result_identifier: str
+    ) -> IntrinsicCalibration:
         result_filepath = self._result_filepath(
-            map_key=matching_image_resolution,
+            map_key=image_resolution,
             result_identifier=result_identifier)
         if not os.path.exists(result_filepath):
             raise MCTDetectorRuntimeError(
                 message=f"File does not exist for result {result_identifier} "
-                        f"and given resolution {str(matching_image_resolution)}.")
+                        f"and given resolution {str(image_resolution)}.")
         result_json_raw: str
         try:
             with (open(result_filepath, 'r') as in_file):
@@ -374,14 +434,14 @@ class Calibrator:
         except OSError:
             raise MCTDetectorRuntimeError(
                 message=f"Failed to open result {result_identifier} for "
-                        f"given resolution {str(matching_image_resolution)}.")
+                        f"given resolution {str(image_resolution)}.")
         result_json_dict: dict
         try:
             result_json_dict = dict(json.loads(result_json_raw))
         except JSONDecodeError:
             raise MCTDetectorRuntimeError(
                 message=f"Failed to parse result {result_identifier} for "
-                        f"given resolution {str(matching_image_resolution)}.")
+                        f"given resolution {str(image_resolution)}.")
         intrinsic_calibration: IntrinsicCalibration = IntrinsicCalibration(**result_json_dict)
         return intrinsic_calibration
 

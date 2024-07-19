@@ -439,8 +439,7 @@ class MCTController(MCTComponent):
         newest_result_id: str = response.metadata_list[0].identifier  # placeholder, maybe
         newest_timestamp: datetime.datetime = datetime.datetime.min
         for result_metadata in response.metadata_list:
-            timestamp: datetime.datetime = datetime.datetime.fromisoformat(result_metadata.timestamp_utc)
-            if timestamp > newest_timestamp:
+            if result_metadata.timestamp_utc() > newest_timestamp:
                 newest_result_id = result_metadata.identifier
         detector_connection: DetectorConnection = self._get_connection(
             connection_label=detector_label,
