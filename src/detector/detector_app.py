@@ -10,6 +10,7 @@ from src.detector.api import \
     CameraImageGetRequest, \
     CameraImageGetResponse, \
     CameraParametersGetResponse, \
+    CameraResolutionGetResponse, \
     DetectorFrameGetRequest, \
     DetectorFrameGetResponse, \
     MarkerParametersGetResponse, \
@@ -112,6 +113,10 @@ def create_app() -> FastAPI:
     async def camera_get_parameters() -> CameraParametersGetResponse:
         result: CameraParametersGetResponse = detector.camera_parameters_get()
         return result
+
+    @detector_app.get("/camera/get_resolution")
+    async def camera_get_resolution() -> CameraResolutionGetResponse:
+        return detector.camera_resolution_get()
 
     @detector_app.get("/marker/get_parameters")
     async def marker_get_parameters() -> MarkerParametersGetResponse | ErrorResponse:

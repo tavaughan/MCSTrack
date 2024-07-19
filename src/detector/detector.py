@@ -23,6 +23,8 @@ from .api import \
     CameraParametersGetRequest, \
     CameraParametersGetResponse, \
     CameraParametersSetRequest, \
+    CameraResolutionGetRequest, \
+    CameraResolutionGetResponse, \
     DetectorFrameGetRequest, \
     DetectorFrameGetResponse, \
     DetectorStartRequest, \
@@ -257,6 +259,14 @@ class Detector(MCTComponent):
             return ErrorResponse(message=e.message)
         return EmptyResponse()
 
+    def camera_resolution_get(self, **_kwargs) -> CameraResolutionGetResponse | ErrorResponse:
+        image_resolution: ImageResolution
+        try:
+            image_resolution = self._camera.get_resolution()
+        except MCTDetectorRuntimeError as e:
+            return ErrorResponse(message=e.message)
+        return CameraResolutionGetResponse(resolution=image_resolution)
+
     def detector_frame_get(self, **kwargs) -> DetectorFrameGetResponse | ErrorResponse:
         request: DetectorFrameGetRequest = get_kwarg(
             kwargs=kwargs,
@@ -328,6 +338,7 @@ class Detector(MCTComponent):
             CameraImageGetRequest: self.camera_image_get,
             CameraParametersGetRequest: self.camera_parameters_get,
             CameraParametersSetRequest: self.camera_parameters_set,
+            CameraResolutionGetRequest: self.camera_resolution_get,
             MarkerParametersGetRequest: self.marker_parameters_get,
             MarkerParametersSetRequest: self.marker_parameters_set})
         return return_value
