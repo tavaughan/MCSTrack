@@ -238,10 +238,7 @@ class MCTController(MCTComponent):
             connection_type=DetectorConnection)
         if detector_connection is None:
             return None
-        return DetectorFrame(
-            detected_marker_snapshots=detector_connection.detected_marker_snapshots,
-            rejected_marker_snapshots=detector_connection.rejected_marker_snapshots,
-            timestamp_utc_iso8601=detector_connection.marker_snapshot_timestamp.isoformat())
+        return detector_connection.latest_frame
 
     def get_live_pose_solver_frame(
         self,
@@ -328,10 +325,7 @@ class MCTController(MCTComponent):
                 severity="error",
                 message=f"Failed to find DetectorConnection with label {detector_label}.")
             return
-        detector_connection.detected_marker_snapshots = response.detected_marker_snapshots
-        detector_connection.rejected_marker_snapshots = response.rejected_marker_snapshots
-        detector_connection.marker_snapshot_timestamp = \
-            datetime.datetime.utcnow()  # TODO: This should come from the detector
+        detector_connection.latest_frame = response.frame
 
     def handle_response_get_poses(
         self,

@@ -3,12 +3,12 @@ from src.common import \
     MCTResponse
 from src.common.structures import \
     CaptureFormat, \
+    DetectorFrame, \
     DetectionParameters, \
     IntrinsicCalibration, \
     ImageResolution, \
     KeyValueMetaAny, \
-    KeyValueSimpleAny, \
-    MarkerSnapshot
+    KeyValueSimpleAny
 from .structures import \
     CalibrationImageMetadata, \
     CalibrationImageState, \
@@ -269,8 +269,7 @@ class DetectorFrameGetResponse(MCTResponse):
         return "detector_frame_get"
 
     parsable_type: str = Field(default=parsable_type_identifier(), const=True)
-    detected_marker_snapshots: list[MarkerSnapshot] | None = Field()
-    rejected_marker_snapshots: list[MarkerSnapshot] | None = Field()
+    frame: DetectorFrame = Field()
 
 
 class DetectorStartRequest(MCTRequest):

@@ -272,16 +272,17 @@ class Detector(MCTComponent):
             arg_type=DetectorFrameGetRequest)
         detector_frame: DetectorFrame
         try:
-            response: DetectorFrameGetResponse = DetectorFrameGetResponse(
-                detected_marker_snapshots=None,
-                rejected_marker_snapshots=None)
+            detector_frame = DetectorFrame(
+                detected_marker_snapshots=list(),
+                rejected_marker_snapshots=list(),
+                timestamp_utc_iso8601=self._marker.get_changed_timestamp().isoformat())
             if request.include_detected:
-                response.detected_marker_snapshots = self._marker.get_markers_detected()
+                detector_frame.detected_marker_snapshots = self._marker.get_markers_detected()
             if request.include_rejected:
-                response.rejected_marker_snapshots = self._marker.get_markers_rejected()
+                detector_frame.rejected_marker_snapshots = self._marker.get_markers_rejected()
         except MCTDetectorRuntimeError as e:
             return ErrorResponse(message=e.message)
-        return response
+        return DetectorFrameGetResponse(frame=detector_frame)
 
     def detector_start(self, **_kwargs) -> EmptyResponse | ErrorResponse:
         try:
