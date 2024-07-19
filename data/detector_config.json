@@ -1,11 +1,12 @@
 {
-  "serial_identifier": "example_detector",
-  "camera_implementation": "opencv",
-  "camera_connection": {
-    "usb_id": 2
-  },
-  "camera_intrinsic_parameters": {},
   "calibrator_configuration": {
     "data_path": "./example_data_path/"
+  },
+  "camera_configuration": {
+    "driver": "picamera2",
+    "capture_device": "0"
+  },
+  "marker_configuration": {
+    "method": "aruco_opencv"
   }
 }

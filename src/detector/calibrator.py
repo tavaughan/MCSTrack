@@ -54,14 +54,14 @@ class Calibrator:
     ):
         self._configuration = configuration
         self._status_message_source = status_message_source
-        if not self._exists(path=self._configuration.data_path, pathtype="path", create_path=True):
+        if not self._exists_on_filesystem(path=self._configuration.data_path, pathtype="path", create_path=True):
             self._status_message_source.enqueue_status_message(
                 severity="critical",
                 message="Data path does not exist and could not be created.")
             detailed_message: str = f"{self._configuration.data_path} does not exist and could not be created."
             logger.critical(detailed_message)
             raise RuntimeError(detailed_message)
-        if not self._calibration_map_load():
+        if not self.load():
             message: str = "The calibration map could not be loaded or created. "\
                            "In order to avoid data loss, the software will now abort. " \
                            "Please manually correct or remove the file in the filesystem."
@@ -69,7 +69,7 @@ class Calibrator:
             self._status_message_source.enqueue_status_message(severity="critical", message=message)
             raise RuntimeError(message)
 
-    def add_calibration_image(
+    def add_image(
         self,
         image_base64: str
     ) -> str:  # id of image
@@ -78,10 +78,10 @@ class Calibrator:
         # Before making any changes to the calibration map, make sure folders exist,
         # and that this file does not somehow already exist (highly unlikely)
         key_path: str = self._path_for_map_key(map_key=map_key)
-        if not self._exists(path=key_path, pathtype="path", create_path=True):
+        if not self._exists_on_filesystem(path=key_path, pathtype="path", create_path=True):
             raise MCTDetectorRuntimeError(message=f"Failed to create storage location for input image.")
         image_identifier: str = str(uuid.uuid4())
-        image_filepath = self._filepath_for_calibration_image(
+        image_filepath = self._image_filepath(
             map_key=map_key,
             image_identifier=image_identifier)
         if os.path.exists(image_filepath):
@@ -96,10 +96,10 @@ class Calibrator:
         image_bytes = ImageCoding.image_to_bytes(image_data=image_data, image_format=Calibrator.IMAGE_FORMAT)
         with (open(image_filepath, 'wb') as in_file):
             in_file.write(image_bytes)
-        self._calibration_map_save()
+        self.save()
         return image_identifier
 
-    def calibrate(
+    def calculate(
         self,
         image_resolution: ImageResolution
     ) -> tuple[str, IntrinsicCalibration]:
@@ -126,10 +126,10 @@ class Calibrator:
         for image_metadata in calibration_value.image_metadata_list:
             if image_metadata.state != CalibrationImageState.SELECT:
                 continue
-            image_filepath: str = self._filepath_for_calibration_image(
+            image_filepath: str = self._image_filepath(
                 map_key=calibration_key,
                 image_identifier=image_metadata.identifier)
-            if not self._exists(path=image_filepath, pathtype="filepath"):
+            if not self._exists_on_filesystem(path=image_filepath, pathtype="filepath"):
                 self._status_message_source.enqueue_status_message(
                     severity="warning",
                     message=f"Image {image_metadata.identifier} was not found. "
@@ -230,7 +230,7 @@ class Calibrator:
                 for i in range(0, len(charuco_reprojection_errors))])
 
         result_identifier: str = str(uuid.uuid4())
-        result_filepath = self._filepath_for_calibration_result(
+        result_filepath = self._result_filepath(
             map_key=calibration_key,
             result_identifier=result_identifier)
         IOUtils.json_write(
@@ -245,8 +245,24 @@ class Calibrator:
             identifier=result_identifier,
             image_identifiers=image_identifiers)
         self._calibration_map[calibration_key].result_metadata_list.append(result_metadata)
-        self._calibration_map_save()
+        self.save()
         return result_identifier, intrinsic_calibration
+
+    def _delete_if_exists(self, filepath: str):
+        try:
+            os.remove(filepath)
+        except FileNotFoundError as e:
+            logger.error(e)
+            self._status_message_source.enqueue_status_message(
+                severity="warning",  # It *is* an internal error, but it has few consequences for user... so warning
+                message=f"Failed to remove a file from the calibrator because it does not exist. "
+                        f"See its internal log for details.")
+        except OSError as e:
+            logger.error(e)
+            self._status_message_source.enqueue_status_message(
+                severity="warning",  # It *is* an internal error, but it has few consequences for user... so warning
+                message=f"Failed to remove a file from the calibrator due to an unexpected reason. "
+                        f"See its internal log for details.")
 
     def delete_staged(self) -> None:
         for calibration_key in self._calibration_map.keys():
@@ -254,7 +270,7 @@ class Calibrator:
             image_indices_to_delete: list = list()
             for image_index, image in enumerate(calibration_value.image_metadata_list):
                 if image.state == CalibrationImageState.DELETE:
-                    self._filepath_delete_if_exists(self._filepath_for_calibration_image(
+                    self._delete_if_exists(self._image_filepath(
                         map_key=calibration_key,
                         image_identifier=image.identifier))
                     image_indices_to_delete.append(image_index)
@@ -263,16 +279,31 @@ class Calibrator:
             result_indices_to_delete: list = list()
             for result_index, result in enumerate(calibration_value.result_metadata_list):
                 if result.state == CalibrationResultState.DELETE:
-                    self._filepath_delete_if_exists(self._filepath_for_calibration_result(
+                    self._delete_if_exists(self._result_filepath(
                         map_key=calibration_key,
                         result_identifier=result.identifier))
                     result_indices_to_delete.append(result_index)
             for i in reversed(result_indices_to_delete):
                 del calibration_value.result_metadata_list[i]
-        self._calibration_map_save()
+        self.save()
+
+    def _exists_on_filesystem(
+        self,
+        path: str,
+        pathtype: IOUtils.PathType,
+        create_path: bool = False
+    ) -> bool:
+        return IOUtils.exists(
+            path=path,
+            pathtype=pathtype,
+            create_path=create_path,
+            on_error_for_user=lambda msg: self._status_message_source.enqueue_status_message(
+                severity="error",
+                message=msg),
+            on_error_for_dev=logger.error)
 
     # noinspection DuplicatedCode
-    def get_calibration_image(
+    def get_image(
         self,
         image_identifier: str
     ) -> str:  # image in base64
@@ -291,7 +322,7 @@ class Calibrator:
             raise MCTDetectorRuntimeError(
                 message=f"Image identifier {image_identifier} is associated with multiple images.")
 
-        image_filepath = self._filepath_for_calibration_image(
+        image_filepath = self._image_filepath(
             map_key=matching_image_resolution,
             image_identifier=image_identifier)
         if not os.path.exists(image_filepath):
@@ -310,7 +341,7 @@ class Calibrator:
         return image_base64
 
     # noinspection DuplicatedCode
-    def get_calibration_result(
+    def get_result(
         self,
         result_identifier: str
     ) -> IntrinsicCalibration:
@@ -329,7 +360,7 @@ class Calibrator:
             raise MCTDetectorRuntimeError(
                 message=f"Image identifier {result_identifier} is associated with multiple results.")
 
-        result_filepath = self._filepath_for_calibration_result(
+        result_filepath = self._result_filepath(
             map_key=matching_image_resolution,
             result_identifier=result_identifier)
         if not os.path.exists(result_filepath):
@@ -354,12 +385,22 @@ class Calibrator:
         intrinsic_calibration: IntrinsicCalibration = IntrinsicCalibration(**result_json_dict)
         return intrinsic_calibration
 
-    def list_calibration_detector_resolutions(self) -> list[ImageResolution]:
+    def _image_filepath(
+        self,
+        map_key: ImageResolution,
+        image_identifier: str
+    ) -> str:
+        key_path: str = self._path_for_map_key(map_key=map_key)
+        return os.path.join(
+            key_path,
+            image_identifier + Calibrator.IMAGE_FORMAT)
+
+    def list_resolutions(self) -> list[ImageResolution]:
         resolutions: list[ImageResolution] = list(self._calibration_map.keys())
         return resolutions
 
     # noinspection DuplicatedCode
-    def list_calibration_image_metadata_list(
+    def list_image_metadata(
         self,
         image_resolution: ImageResolution
     ) -> list[CalibrationImageMetadata]:
@@ -370,7 +411,7 @@ class Calibrator:
         return image_metadata_list
 
     # noinspection DuplicatedCode
-    def list_calibration_result_metadata_list(
+    def list_result_metadata(
         self,
         image_resolution: ImageResolution
     ) -> list[CalibrationResultMetadata]:
@@ -380,117 +421,11 @@ class Calibrator:
             result_metadata_list = self._calibration_map[map_key].result_metadata_list
         return result_metadata_list
 
-    # noinspection DuplicatedCode
-    def update_calibration_image_metadata(
-        self,
-        image_identifier: str,
-        image_state: CalibrationImageState,
-        image_label: str
-    ) -> None:
-        found_count: int = 0
-        for map_key in self._calibration_map:
-            for image in self._calibration_map[map_key].image_metadata_list:
-                if image.identifier == image_identifier:
-                    image.state = image_state
-                    image.label = image_label
-                    found_count += 1
-                    break
-        if found_count < 1:
-            raise MCTDetectorRuntimeError(
-                message=f"Image identifier {image_identifier} is not associated with any image.")
-        elif found_count > 1:
-            self._status_message_source.enqueue_status_message(
-                severity="warning",
-                message=f"Image identifier {image_identifier} is associated with multiple images.")
-        self._calibration_map_save()
-
-    # noinspection DuplicatedCode
-    def update_calibration_result_metadata(
-        self,
-        result_identifier: str,
-        result_state: CalibrationResultState
-    ) -> None:
-        found_count: int = 0
-        for map_key in self._calibration_map:
-            for result in self._calibration_map[map_key].result_metadata_list:
-                if result.identifier == result_identifier:
-                    result.state = result_state
-                    found_count += 1
-                    break
-        if found_count < 1:
-            raise MCTDetectorRuntimeError(
-                message=f"Result identifier {result_identifier} is not associated with any result.")
-        elif found_count > 1:
-            self._status_message_source.enqueue_status_message(
-                severity="warning",
-                message=f"Result identifier {result_identifier} is associated with multiple results.")
-        self._calibration_map_save()
-
-    def _filepath_for_calibration_image(
-        self,
-        map_key: ImageResolution,
-        image_identifier: str
-    ) -> str:
-        key_path: str = self._path_for_map_key(map_key=map_key)
-        return os.path.join(
-            key_path,
-            image_identifier + Calibrator.IMAGE_FORMAT)
-
-    def _filepath_for_calibration_result(
-        self,
-        map_key: ImageResolution,
-        result_identifier: str
-    ) -> str:
-        key_path: str = self._path_for_map_key(map_key=map_key)
-        return os.path.join(
-            key_path,
-            result_identifier + Calibrator.RESULT_FORMAT)
-
-    def _filepath_delete_if_exists(self, filepath: str):
-        try:
-            os.remove(filepath)
-        except FileNotFoundError as e:
-            logger.error(e)
-            self._status_message_source.enqueue_status_message(
-                severity="warning",  # It *is* an internal error, but it has few consequences for user... so warning
-                message=f"Failed to remove a file from the calibrator because it does not exist. "
-                        f"See its internal log for details.")
-        except OSError as e:
-            logger.error(e)
-            self._status_message_source.enqueue_status_message(
-                severity="warning",  # It *is* an internal error, but it has few consequences for user... so warning
-                message=f"Failed to remove a file from the calibrator due to an unexpected reason. "
-                        f"See its internal log for details.")
-
-    def _path_for_map_key(
-        self,
-        map_key: ImageResolution
-    ) -> str:
-        return os.path.join(self._configuration.data_path, str(map_key))
-
-    def _exists(
-        self,
-        path: str,
-        pathtype: IOUtils.PathType,
-        create_path: bool = False
-    ) -> bool:
-        return IOUtils.exists(
-            path=path,
-            pathtype=pathtype,
-            create_path=create_path,
-            on_error_for_user=lambda msg: self._status_message_source.enqueue_status_message(
-                severity="error",
-                message=msg),
-            on_error_for_dev=logger.error)
-
-    def _calibration_map_filepath(self) -> str:
-        return os.path.join(self._configuration.data_path, Calibrator.CALIBRATION_MAP_FILENAME)
-
-    def _calibration_map_load(self) -> bool:
+    def load(self) -> bool:
         """
         :return: True if loaded or if it can be created without overwriting existing data. False otherwise.
         """
-        calibration_map_filepath: str = self._calibration_map_filepath()
+        calibration_map_filepath: str = self._map_filepath()
         if not os.path.exists(calibration_map_filepath):
             self._calibration_map = dict()
             return True
@@ -526,11 +461,76 @@ class Calibrator:
         self._calibration_map = calibration_map.as_dict()
         return True
 
-    def _calibration_map_save(self) -> None:
+    def _map_filepath(self) -> str:
+        return os.path.join(self._configuration.data_path, Calibrator.CALIBRATION_MAP_FILENAME)
+
+    def _path_for_map_key(
+        self,
+        map_key: ImageResolution
+    ) -> str:
+        return os.path.join(self._configuration.data_path, str(map_key))
+
+    def _result_filepath(
+        self,
+        map_key: ImageResolution,
+        result_identifier: str
+    ) -> str:
+        key_path: str = self._path_for_map_key(map_key=map_key)
+        return os.path.join(
+            key_path,
+            result_identifier + Calibrator.RESULT_FORMAT)
+
+    def save(self) -> None:
         IOUtils.json_write(
-            filepath=self._calibration_map_filepath(),
+            filepath=self._map_filepath(),
             json_dict=CalibrationMap.from_dict(self._calibration_map).dict(),
             on_error_for_user=lambda msg: self._status_message_source.enqueue_status_message(
                 severity="error",
                 message=msg),
             on_error_for_dev=logger.error)
+
+    # noinspection DuplicatedCode
+    def update_image_metadata(
+        self,
+        image_identifier: str,
+        image_state: CalibrationImageState,
+        image_label: str
+    ) -> None:
+        found_count: int = 0
+        for map_key in self._calibration_map:
+            for image in self._calibration_map[map_key].image_metadata_list:
+                if image.identifier == image_identifier:
+                    image.state = image_state
+                    image.label = image_label
+                    found_count += 1
+                    break
+        if found_count < 1:
+            raise MCTDetectorRuntimeError(
+                message=f"Image identifier {image_identifier} is not associated with any image.")
+        elif found_count > 1:
+            self._status_message_source.enqueue_status_message(
+                severity="warning",
+                message=f"Image identifier {image_identifier} is associated with multiple images.")
+        self.save()
+
+    # noinspection DuplicatedCode
+    def update_result_metadata(
+        self,
+        result_identifier: str,
+        result_state: CalibrationResultState
+    ) -> None:
+        found_count: int = 0
+        for map_key in self._calibration_map:
+            for result in self._calibration_map[map_key].result_metadata_list:
+                if result.identifier == result_identifier:
+                    result.state = result_state
+                    found_count += 1
+                    break
+        if found_count < 1:
+            raise MCTDetectorRuntimeError(
+                message=f"Result identifier {result_identifier} is not associated with any result.")
+        elif found_count > 1:
+            self._status_message_source.enqueue_status_message(
+                severity="warning",
+                message=f"Result identifier {result_identifier} is associated with multiple results.")
+        self.save()

@@ -1,2 +1,2 @@
-from .abstract_camera_interface import AbstractCameraInterface
-from .abstract_marker_interface import AbstractMarkerInterface
+from .abstract_camera import AbstractCamera
+from .abstract_marker import AbstractMarker

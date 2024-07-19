@@ -1,7 +1,10 @@
 from ..exceptions import MCTDetectorRuntimeError
-from ..interfaces import AbstractCameraInterface
+from ..interfaces import AbstractCamera
+from ..structures import \
+    CameraConfiguration, \
+    CameraStatus
+from src.common import StatusMessageSource
 from src.common.structures import \
-    CaptureStatus, \
     KeyValueSimpleAbstract, \
     KeyValueSimpleAny, \
     KeyValueSimpleBool, \
@@ -13,8 +16,9 @@ from src.common.structures import \
     KeyValueMetaInt
 import datetime
 import logging
+import numpy
 from picamera2 import Picamera2
-from picamera2.configuration import CameraConfiguration
+from picamera2.configuration import CameraConfiguration as Picamera2Configuration
 from typing import Final
 
 
@@ -67,94 +71,38 @@ _PICAMERA2_CONTRAST_KEY: Final[str] = "Contrast"
 _PICAMERA2_SHARPNESS_KEY: Final[str] = "Sharpness"
 
 
-class PiCamera(AbstractCameraInterface):
+class Picamera2Camera(AbstractCamera):
 
     _camera: Picamera2
-    _camera_configuration: CameraConfiguration
+    _camera_configuration: Picamera2Configuration
 
-    _captured_timestamp_utc: datetime.datetime
-    _capture_status: CaptureStatus  # internal bookkeeping
+    _image: numpy.ndarray | None
+    _image_timestamp_utc: datetime.datetime
 
-    def __init__(self):
-        self._captured_image = None
-        self._captured_timestamp_utc = datetime.datetime.min
-
-        self._capture_status = CaptureStatus()
-        self._capture_status.status = CaptureStatus.Status.STOPPED
-
+    def __init__(
+        self,
+        configuration: CameraConfiguration,
+        status_message_source: StatusMessageSource
+    ):
+        super().__init__(
+            configuration=configuration,
+            status_message_source=status_message_source)
+        self._image = None
+        self._image_timestamp_utc = datetime.datetime.min
         self._camera = Picamera2()
         self._camera_configuration = self._camera.create_video_configuration()
+        self.set_status(CameraStatus.STOPPED)
 
-    def internal_update_capture(self) -> None:
-        self._captured_image = self._camera.capture_array()
+    def get_changed_timestamp(self) -> datetime.datetime:
+        return self._image_timestamp_utc
 
-        if self._captured_image is None:
-            message: str = "Failed to grab frame."
-            self._status.capture_errors.append(message)
-            self._capture_status.status = CaptureStatus.Status.FAILURE
-            raise MCTDetectorRuntimeError(message=message)
+    def get_image(self) -> numpy.ndarray:
+        if self._image is None:
+            raise MCTDetectorRuntimeError(message="There is no captured image.")
+        return self._image
 
-        self._captured_timestamp_utc = datetime.datetime.utcnow()
-
-    # noinspection DuplicatedCode
-    def set_capture_properties(self, parameters: list[KeyValueSimpleAny]) -> None:
-
-        mismatched_keys: list[str] = list()
-
-        key_value: KeyValueSimpleAbstract
-        for key_value in parameters:
-            if key_value.key == _CAMERA_FPS_KEY:
-                if not isinstance(key_value, KeyValueSimpleFloat):
-                    mismatched_keys.append(key_value.key)
-                    continue
-                limit: int = int(round(_MICROSECONDS_PER_SECOND / key_value.value))
-                limits: tuple[int, int] = (limit, limit)
-                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_FRAME_DURATION_LIMITS_KEY] = limits
-            elif key_value.key == _CAMERA_AUTO_EXPOSURE_KEY:
-                if not isinstance(key_value, KeyValueSimpleBool):
-                    mismatched_keys.append(key_value.key)
-                    continue
-                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_AEC_AGC_KEY] = key_value.value
-            elif key_value.key == _CAMERA_GAIN_KEY:
-                if not isinstance(key_value, KeyValueSimpleFloat):
-                    mismatched_keys.append(key_value.key)
-                    continue
-                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_GAIN_KEY] = key_value.value
-            elif key_value.key == _CAMERA_EXPOSURE_KEY:
-                if not isinstance(key_value, KeyValueSimpleInt):
-                    mismatched_keys.append(key_value.key)
-                    continue
-                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_EXPOSURE_KEY] = key_value.value
-            elif key_value.key == _CAMERA_BRIGHTNESS_KEY:
-                if not isinstance(key_value, KeyValueSimpleFloat):
-                    mismatched_keys.append(key_value.key)
-                    continue
-                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_BRIGHTNESS_KEY] = key_value.value
-            elif key_value.key == _CAMERA_CONTRAST_KEY:
-                if not isinstance(key_value, KeyValueSimpleFloat):
-                    mismatched_keys.append(key_value.key)
-                    continue
-                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_CONTRAST_KEY] = key_value.value
-            elif key_value.key == _CAMERA_SHARPNESS_KEY:
-                if not isinstance(key_value, KeyValueSimpleFloat):
-                    mismatched_keys.append(key_value.key)
-                    continue
-                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_SHARPNESS_KEY] = key_value.value
-            else:
-                mismatched_keys.append(key_value.key)
-
-        if len(mismatched_keys) > 0:
-            raise MCTDetectorRuntimeError(
-                message=f"The following parameters could not be applied due to key mismatch: {str(mismatched_keys)}")
-
-        if self._capture_status.status == CaptureStatus.Status.RUNNING:
-            self._camera.stop()
-            self._camera.configure(self._camera_configuration)
-            self._camera.start()
-            self._captured_image = self._camera.capture_array()
-
-    def get_capture_properties(self, **_kwargs) -> list[KeyValueMetaAbstract]:
-        if self._capture_status.status != CaptureStatus.Status.RUNNING:
+    def get_parameters(self, **_kwargs) -> list[KeyValueMetaAbstract]:
+        if self.get_status() != CameraStatus.RUNNING:
             raise MCTDetectorRuntimeError(message="The capture is not active, and properties cannot be retrieved.")
 
         current_controls: dict = {
@@ -215,7 +163,68 @@ class PiCamera(AbstractCameraInterface):
 
         return return_value
 
-    def start_capture(self) -> None:
+    @staticmethod
+    def get_type_identifier() -> str:
+        return "picamera2"
+
+    # noinspection DuplicatedCode
+    def set_parameters(self, parameters: list[KeyValueSimpleAny]) -> None:
+
+        mismatched_keys: list[str] = list()
+
+        key_value: KeyValueSimpleAbstract
+        for key_value in parameters:
+            if key_value.key == _CAMERA_FPS_KEY:
+                if not isinstance(key_value, KeyValueSimpleFloat):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                limit: int = int(round(_MICROSECONDS_PER_SECOND / key_value.value))
+                limits: tuple[int, int] = (limit, limit)
+                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_FRAME_DURATION_LIMITS_KEY] = limits
+            elif key_value.key == _CAMERA_AUTO_EXPOSURE_KEY:
+                if not isinstance(key_value, KeyValueSimpleBool):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_AEC_AGC_KEY] = key_value.value
+            elif key_value.key == _CAMERA_GAIN_KEY:
+                if not isinstance(key_value, KeyValueSimpleFloat):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_GAIN_KEY] = key_value.value
+            elif key_value.key == _CAMERA_EXPOSURE_KEY:
+                if not isinstance(key_value, KeyValueSimpleInt):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_EXPOSURE_KEY] = key_value.value
+            elif key_value.key == _CAMERA_BRIGHTNESS_KEY:
+                if not isinstance(key_value, KeyValueSimpleFloat):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_BRIGHTNESS_KEY] = key_value.value
+            elif key_value.key == _CAMERA_CONTRAST_KEY:
+                if not isinstance(key_value, KeyValueSimpleFloat):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_CONTRAST_KEY] = key_value.value
+            elif key_value.key == _CAMERA_SHARPNESS_KEY:
+                if not isinstance(key_value, KeyValueSimpleFloat):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_SHARPNESS_KEY] = key_value.value
+            else:
+                mismatched_keys.append(key_value.key)
+
+        if len(mismatched_keys) > 0:
+            raise MCTDetectorRuntimeError(
+                message=f"The following parameters could not be applied due to key mismatch: {str(mismatched_keys)}")
+
+        if self.get_status() == CameraStatus.RUNNING:
+            self._camera.stop()
+            self._camera.configure(self._camera_configuration)
+            self._camera.start()
+            self._image = self._camera.capture_array()
+
+    def start(self) -> None:
 
         if _PICAMERA2_FRAME_DURATION_LIMITS_KEY not in self._camera_configuration:
             minr = int(round(_MICROSECONDS_PER_SECOND / _CAMERA_FPS_DEFAULT))
@@ -242,11 +251,22 @@ class PiCamera(AbstractCameraInterface):
 
         self._camera.configure(self._camera_configuration)
         self._camera.start()
-        self._captured_image = self._camera.capture_array()
-        self._capture_status.status = CaptureStatus.Status.RUNNING
+        self._image = self._camera.capture_array()
+        self.set_status(CameraStatus.RUNNING)
 
-    def stop_capture(self) -> None:
-        if self._captured_image is not None:
-            self._captured_image = None
-        self._capture_status.status = CaptureStatus.Status.STOPPED
+    def stop(self) -> None:
+        if self._image is not None:
+            self._image = None
+        self.set_status(CameraStatus.STOPPED)
         self._camera.stop()
+
+    def update(self) -> None:
+        self._image = self._camera.capture_array()
+
+        if self._image is None:
+            message: str = "Failed to grab frame."
+            self.add_status_message(severity="error", message=message)
+            self.set_status(CameraStatus.FAILURE)
+            raise MCTDetectorRuntimeError(message=message)
+
+        self._image_timestamp_utc = datetime.datetime.utcnow()
