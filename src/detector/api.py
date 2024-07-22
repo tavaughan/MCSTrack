@@ -236,6 +236,16 @@ class CameraParametersSetRequest(MCTRequest):
     parameters: list[KeyValueSimpleAny] = Field()
 
 
+class CameraParametersSetResponse(MCTResponse):
+
+    @staticmethod
+    def parsable_type_identifier() -> str:
+        return "detector_camera_parameters_set"
+
+    parsable_type: str = Field(default=parsable_type_identifier(), const=True)
+    resolution: ImageResolution = Field()  # Sometimes parameter changes may result in changes of resolution
+
+
 class CameraResolutionGetRequest(MCTRequest):
     @staticmethod
     def parsable_type_identifier() -> str:

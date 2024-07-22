@@ -10,8 +10,7 @@ from src.common.api import \
 from src.common.structures import \
     DetectorFrame, \
     ImageResolution, \
-    IntrinsicParameters, \
-    MarkerSnapshot
+    IntrinsicParameters
 from src.detector.api import \
     CalibrationCalculateResponse, \
     CalibrationImageAddResponse, \
@@ -23,12 +22,12 @@ from src.detector.api import \
     CalibrationResultMetadataListResponse, \
     CameraImageGetResponse, \
     CameraParametersGetResponse, \
+    CameraParametersSetResponse, \
     CameraResolutionGetResponse, \
     DetectorFrameGetResponse, \
     DetectorStartRequest, \
     DetectorStopRequest, \
     MarkerParametersGetResponse
-import datetime
 import uuid
 
 
@@ -98,6 +97,7 @@ class DetectorConnection(Connection):
             CalibrationResultMetadataListResponse,
             CameraImageGetResponse,
             CameraParametersGetResponse,
+            CameraParametersSetResponse,
             CameraResolutionGetResponse,
             DequeueStatusMessagesResponse,
             DetectorFrameGetResponse,

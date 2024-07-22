@@ -44,6 +44,7 @@ from src.detector.api import \
     CameraParametersGetRequest, \
     CameraParametersGetResponse, \
     CameraParametersSetRequest, \
+    CameraParametersSetResponse, \
     MarkerParametersGetRequest, \
     MarkerParametersGetResponse, \
     MarkerParametersSetRequest
@@ -716,15 +717,15 @@ class DetectorPanel(BasePanel):
         for response in response_series.series:
             if isinstance(response, CalibrationImageAddResponse):
                 self._handle_add_calibration_image_response(response=response)
+            elif isinstance(response, CameraImageGetResponse):
+                self._handle_capture_snapshot_response(response=response)
             elif isinstance(response, CameraParametersGetResponse):
                 self._handle_get_capture_parameters_response(response=response)
             elif isinstance(response, MarkerParametersGetResponse):
                 self._handle_get_detection_parameters_response(response=response)
-            elif isinstance(response, CameraImageGetResponse):
-                self._handle_capture_snapshot_response(response=response)
             elif isinstance(response, ErrorResponse):
                 self.handle_error_response(response=response)
-            elif not isinstance(response, EmptyResponse):
+            elif not isinstance(response, (EmptyResponse, CameraParametersSetResponse)):
                 self.handle_unknown_response(response=response)
 
     def _handle_add_calibration_image_response(
@@ -997,9 +998,12 @@ class DetectorPanel(BasePanel):
             self._update_ui_image()
 
     def _update_ui_controls(self):
+        self._detector_selector.set_enabled(enable=False)
         self._set_display_controls_enabled(enable=False)
         self._set_parameter_controls_enabled(enable=False)
         self._calibration_capture_button.Enable(enable=False)
+        if not self._controller.is_running():
+            return
         self._detector_selector.set_enabled(enable=True)
         selected_detector_label: str = self._detector_selector.selector.GetStringSelection()
         if selected_detector_label is None or len(selected_detector_label) <= 0:
