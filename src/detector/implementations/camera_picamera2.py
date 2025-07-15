@@ -11,8 +11,10 @@ from src.common.structures import \
     KeyValueSimpleBool, \
     KeyValueSimpleFloat, \
     KeyValueSimpleInt, \
+    KeyValueSimpleString, \
     KeyValueMetaAbstract, \
     KeyValueMetaBool, \
+    KeyValueMetaEnum, \
     KeyValueMetaFloat, \
     KeyValueMetaInt
 import datetime
@@ -29,10 +31,22 @@ _RANGE_MAXIMUM_INDEX: Final[int] = 1
 _RANGE_DEFAULT_INDEX: Final[int] = 2
 _MICROSECONDS_PER_SECOND: Final[int] = 1000000
 
-_CAMERA_RESOLUTION_KEY: Final[str] = "size"
-
 _CAMERA_STREAM: Final[str] = "main"
 _CAMERA_CONTROLS_KEY: Final[str] = "controls"
+_CAMERA_RESOLUTION_KEY: Final[str] = "Resolution"
+_CAMERA_RESOLUTION_DEFAULT: Final[ImageResolution] = ImageResolution(x_px=1456, y_px=1080)
+_CAMERA_RESOLUTION_OPTIONS: Final[list[ImageResolution]] = [
+    ImageResolution(x_px=1456, y_px=1080),
+    ImageResolution(x_px=1280, y_px=1080),
+    ImageResolution(x_px=1280, y_px=720),
+    ImageResolution(x_px=1024, y_px=768),
+    ImageResolution(x_px=1024, y_px=576),
+    ImageResolution(x_px=768, y_px=576),
+    ImageResolution(x_px=768, y_px=432),
+    ImageResolution(x_px=640, y_px=480),
+    ImageResolution(x_px=640, y_px=360),
+    ImageResolution(x_px=480, y_px=360),
+    ImageResolution(x_px=480, y_px=270)]
 _CAMERA_FPS_KEY: Final[str] = "FramesPerSecond"
 _CAMERA_FPS_DEFAULT: Final[float] = 30.0
 _CAMERA_FPS_RANGE_MINIMUM: Final[float] = 1.0
@@ -76,6 +90,7 @@ _CAMERA_COLOUR_GAIN_BLUE_DEFAULT: Final[float] = 1.0  # Arbitrarily-chosen value
 _CAMERA_COLOUR_GAIN_BLUE_DIGIT_COUNT: Final[int] = 2
 
 # _PICAMERA2_FRAME_RATE_KEY: Final[str] = "FrameRate"  # For consistency, use FrameDurationLimits instead
+_PICAMERA2_RESOLUTION_KEY: Final[str] = "size"
 _PICAMERA2_FRAME_DURATION_LIMITS_KEY: Final[str] = "FrameDurationLimits"
 _PICAMERA2_AEC_AGC_KEY: Final[str] = "AeEnable"  # Automatic exposure/gain adjustment
 _PICAMERA2_GAIN_KEY: Final[str] = "AnalogueGain"
@@ -129,6 +144,11 @@ class Picamera2Camera(AbstractCamera):
             **self._camera_configuration[_CAMERA_CONTROLS_KEY]}
 
         return_value: list[KeyValueMetaAbstract] = list()
+
+        resolution_tuple: tuple[int, int] = current_controls[_PICAMERA2_RESOLUTION_KEY]  # x, y
+        return_value.append(KeyValueMetaEnum(
+            value=str(ImageResolution(x_px=resolution_tuple[0], y_px=resolution_tuple[1])),
+            allowable_values=[str(resolution) for resolution in _CAMERA_RESOLUTION_OPTIONS]))
 
         frame_limits_us: tuple[float, float] = current_controls[_PICAMERA2_FRAME_DURATION_LIMITS_KEY]  # max, min
         frame_duration_us: float = (frame_limits_us[0] + frame_limits_us[1]) / 2.0
@@ -199,7 +219,7 @@ class Picamera2Camera(AbstractCamera):
         return return_value
 
     def get_resolution(self) -> ImageResolution:
-        resolution: tuple[int, int] = self._camera_configuration[_CAMERA_STREAM][_CAMERA_RESOLUTION_KEY]
+        resolution: tuple[int, int] = self._camera_configuration[_CAMERA_STREAM][_PICAMERA2_RESOLUTION_KEY]
         return ImageResolution(x_px=resolution[0], y_px=resolution[1])
 
     @staticmethod
@@ -213,7 +233,18 @@ class Picamera2Camera(AbstractCamera):
 
         key_value: KeyValueSimpleAbstract
         for key_value in parameters:
-            if key_value.key == _CAMERA_FPS_KEY:
+            if key_value.key == _CAMERA_RESOLUTION_KEY:
+                if not isinstance(key_value, KeyValueSimpleString):
+                    mismatched_keys.append(key_value.key)
+                    continue
+                try:
+                    resolution: ImageResolution = ImageResolution.from_str(key_value.value)
+                    resolution_tuple: tuple[int, int] = (resolution.x_px, resolution.y_px)
+                    self._camera_configuration[_CAMERA_STREAM][_PICAMERA2_RESOLUTION_KEY] = resolution_tuple
+                except ValueError:
+                    mismatched_keys.append(key_value.key)
+                    continue
+            elif key_value.key == _CAMERA_FPS_KEY:
                 if not isinstance(key_value, KeyValueSimpleFloat):
                     mismatched_keys.append(key_value.key)
                     continue
@@ -285,6 +316,10 @@ class Picamera2Camera(AbstractCamera):
             self._image = self._camera.capture_array()
 
     def start(self) -> None:
+
+        if _PICAMERA2_RESOLUTION_KEY not in self._camera_configuration:
+            self._camera_configuration[_CAMERA_CONTROLS_KEY][_PICAMERA2_RESOLUTION_KEY] = (
+                _CAMERA_RESOLUTION_DEFAULT.x_px, _CAMERA_RESOLUTION_DEFAULT.y_px)
 
         if _PICAMERA2_FRAME_DURATION_LIMITS_KEY not in self._camera_configuration:
             minr = int(round(_MICROSECONDS_PER_SECOND / _CAMERA_FPS_DEFAULT))
