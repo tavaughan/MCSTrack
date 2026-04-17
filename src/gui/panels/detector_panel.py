@@ -327,8 +327,9 @@ class DetectorPanel(BasePanel):
             detector_live_data: MCTController.DetectorLiveData = \
                 self._controller.get_live_detector_data(detector_label=selected_detector_label)
             self._preview_panel.update_image(
-                frame=detector_live_data.frame,
-                capture_resolution=detector_live_data.camera_resolution)
+                capture_resolution=detector_live_data.camera_resolution,
+                image_base64=detector_live_data.frame.image_base64,
+                annotations=detector_live_data.frame.annotations)
         else:
             self._preview_panel.update_image()
 

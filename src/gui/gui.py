@@ -101,15 +101,15 @@ class ControllerFrame(wx.Frame):
             select=False)
         self._panels.add(self._detector_panel)
 
-        # self._intrinsics_panel = IntrinsicsPanel(
-        #     parent=self._notebook,
-        #     controller=self._controller)
-        # self._notebook.AddPage(
-        #     page=self._intrinsics_panel,
-        #     text=INTRINSIC_CALIBRATOR_LABEL,
-        #     select=False)
-        # self._panels.add(self._intrinsics_panel)
-        #
+        self._intrinsics_panel = IntrinsicsPanel(
+            parent=self._notebook,
+            controller=self._controller)
+        self._notebook.AddPage(
+            page=self._intrinsics_panel,
+            text=INTRINSIC_CALIBRATOR_LABEL,
+            select=False)
+        self._panels.add(self._intrinsics_panel)
+
         # self._extrinsics_panel = ExtrinsicsPanel(
         #     parent=self._notebook,
         #     controller=self._controller)
@@ -142,7 +142,7 @@ class ControllerFrame(wx.Frame):
             handler=self.on_page_changed)
 
         self._status_bar = self.CreateStatusBar()
-        self._status_bar.SetMinSize((0, _STATUS_BAR_HEIGHT_PX))
+        self._status_bar.SetMinSize(size=wx.Size(0, _STATUS_BAR_HEIGHT_PX))
         self._status_bar.SetFieldsCount(number=_STATUS_BAR_FIELD_COUNT, widths=[-1, _STATUS_BAR_HEIGHT_PX])
         self.SetStatusText(text="", number=_STATUS_BAR_FIELD_INDEX_TEXT)
         self.SetStatusText(text="", number=_STATUS_BAR_FIELD_INDEX_BUTTON)
@@ -163,16 +163,16 @@ class ControllerFrame(wx.Frame):
             handler=self.update)
 
     def on_status_bar_sized(self, _event: wx.SizeEvent | None = None):
-        field_rect: tuple = self._status_bar.GetFieldRect(_STATUS_BAR_FIELD_INDEX_BUTTON)
-        self._status_button.SetSize(field_rect)
+        field_rect: wx.Rect = self._status_bar.GetFieldRect(_STATUS_BAR_FIELD_INDEX_BUTTON)
+        self._status_button.SetSize(rect=field_rect)
 
     def on_status_button_pressed(self, _event: wx.CommandEvent):
         if self._status_log_visible:
             self._status_log_visible = False
-            self._log_panel.SetMinSize((0, 0))
+            self._log_panel.SetMinSize(size=wx.Size(0, 0))
         else:
             self._status_log_visible = True
-            self._log_panel.SetMinSize((0, _STATUS_LOG_HEIGHT_PX))
+            self._log_panel.SetMinSize(size=wx.Size(0, _STATUS_LOG_HEIGHT_PX))
         self._frame_main_panel.Layout()
 
     def on_page_changed(self, event: wx.BookCtrlEvent):

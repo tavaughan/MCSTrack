@@ -1,7 +1,6 @@
 from src.gui.panels.feedback.image_panel import ImagePanel
 from src.common import \
     Annotation, \
-    DetectorFrame, \
     ImageFormat, \
     ImageResolution, \
     ImageUtils
@@ -41,55 +40,56 @@ def _marker_snapshot_list_to_opencv_points(
 
 class DetectorSingleFramePanel(ImagePanel):
 
-    draw_image: bool
-    draw_annotations_detected: bool
-    draw_annotations_rejected: bool
+    _draw_image: bool
+    _draw_annotations_detected: bool
+    _draw_annotations_rejected: bool
 
     def __init__(
         self,
         parent: wx.Window
     ):
         super().__init__(parent=parent)
-        self.draw_image = False
-        self.draw_annotations_detected = False
-        self.draw_annotations_rejected = False
+        self._draw_image = False
+        self._draw_annotations_detected = False
+        self._draw_annotations_rejected = False
 
     def set_draw_image(self, enabled):
-        self.draw_image = enabled
+        self._draw_image = enabled
 
     def set_draw_annotations_detected(self, enabled):
-        self.draw_annotations_detected = enabled
+        self._draw_annotations_detected = enabled
 
     def set_draw_annotations_rejected(self, enabled):
-        self.draw_annotations_rejected = enabled
+        self._draw_annotations_rejected = enabled
 
     def update_image(
         self,
         capture_resolution: ImageResolution | None = None,
-        frame: DetectorFrame | None = None
+        image_base64: str | None = None,
+        annotations: list[Annotation] | None = None
     ) -> None:
         """
         Draw the specified frame according to the settings in this class and the available data.
-        If no image data is available (frame.image_base64 is None), then
-        capture_resolution must be provided for the annotations to be drawn.
+        If no image data is available (image_base64 is None), then
+        capture_resolution must be provided for anything to be drawn.
         If insufficient data is provided, or if the class is configured to draw nothing,
         then the preview will be black.
         :param capture_resolution: The resolution of the capture. Required for scale information.
-        :param frame: The data to be drawn.
+        :param image_base64:
+        :param annotations:
         """
         panel_size: wx.Size = self.GetSize()
         panel_size_tuple: tuple[int, int] = (panel_size.x, panel_size.y)
         display_image: numpy.ndarray
         if (
-            (not self.draw_image and not self.draw_annotations_detected and not self.draw_annotations_rejected) or
-            (frame is None) or
-            (capture_resolution is None and frame.image_base64 is None)
+            (not self._draw_image and not self._draw_annotations_detected and not self._draw_annotations_rejected) or
+            (capture_resolution is None and image_base64 is None)
         ):
             display_image = ImageUtils.black_image(resolution_px=panel_size_tuple)
         else:
             scale: float
-            if self.draw_image and frame.image_base64 is not None:
-                opencv_image: numpy.ndarray = ImageUtils.base64_to_image(input_base64=frame.image_base64)
+            if self._draw_image and image_base64 is not None:
+                opencv_image: numpy.ndarray = ImageUtils.base64_to_image(input_base64=image_base64)
                 display_image: numpy.ndarray = ImageUtils.image_resize_to_fit(
                     opencv_image=opencv_image,
                     available_size=panel_size_tuple)
@@ -102,10 +102,10 @@ class DetectorSingleFramePanel(ImagePanel):
                     available_size_px=panel_size_tuple)
                 scale: float = rescaled_resolution_px[1] / capture_resolution.y_px
 
-            if self.draw_annotations_detected:
+            if self._draw_annotations_detected and annotations is not None:
                 identified_annotations: list[Annotation] = [
                     annotation
-                    for annotation in frame.annotations
+                    for annotation in annotations
                     if annotation.base_feature_label() != Annotation.UNIDENTIFIED_LABEL]
                 corners: numpy.ndarray = _marker_snapshot_list_to_opencv_points(
                     marker_snapshot_list=identified_annotations,
@@ -116,10 +116,10 @@ class DetectorSingleFramePanel(ImagePanel):
                     isClosed=True,
                     color=[255, 191, 127],  # blue in BGR
                     thickness=2)
-            if self.draw_annotations_rejected:
+            if self._draw_annotations_rejected and annotations is not None:
                 unidentified_annotations: list[Annotation] = [
                     annotation
-                    for annotation in frame.annotations
+                    for annotation in annotations
                     if annotation.base_feature_label() == Annotation.UNIDENTIFIED_LABEL]
                 corners: numpy.ndarray = _marker_snapshot_list_to_opencv_points(
                     marker_snapshot_list=unidentified_annotations,

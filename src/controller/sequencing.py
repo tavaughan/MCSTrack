@@ -47,17 +47,15 @@ from src.detector import \
     IntrinsicCalibrationImageAddResponse, \
     IntrinsicCalibrationImageGetRequest, \
     IntrinsicCalibrationImageGetResponse, \
-    IntrinsicCalibrationImageMetadataListRequest, \
-    IntrinsicCalibrationImageMetadataListResponse, \
     IntrinsicCalibrationImageMetadataUpdateRequest, \
+    IntrinsicCalibrationMetadataListRequest, \
+    IntrinsicCalibrationMetadataListResponse, \
     IntrinsicCalibrationResolutionListRequest, \
     IntrinsicCalibrationResolutionListResponse, \
     IntrinsicCalibrationResultGetRequest, \
     IntrinsicCalibrationResultGetResponse, \
     IntrinsicCalibrationResultGetActiveRequest, \
     IntrinsicCalibrationResultGetActiveResponse, \
-    IntrinsicCalibrationResultMetadataListRequest, \
-    IntrinsicCalibrationResultMetadataListResponse, \
     IntrinsicCalibrationResultMetadataUpdateRequest
 from src.mixer import \
     ExtrinsicCalibrationCalculateRequest, \
@@ -1165,9 +1163,6 @@ class DetectorFrameGetSequencer(AbstractSequencer):
         response_series: MCTResponseSeries,
         _passthrough_parameters: dict[str, ...]
     ):
-        self._status_message_source.enqueue_status_message(
-            severity=SeverityLabel.DEBUG,
-            message="DetectorFrameGetSequencer._request_frame_get_responded()")
         if self._report_response_series_and_errors(
             response_series=response_series,
             expected_types=[
@@ -1276,9 +1271,6 @@ class MixerFrameGetSequencer(AbstractSequencer):
         response_series: MCTResponseSeries,
         _passthrough_parameters: dict[str, ...]
     ):
-        self._status_message_source.enqueue_status_message(
-            severity=SeverityLabel.DEBUG,
-            message="MixerFrameGetSequencer._request_frame_get_responded()")
         mixer_label: str = response_series.responder
         mixer_data: MixerFrameGetSequencer.OutputMixerData = self.data_by_mixer_label[mixer_label]
         request_id: uuid.UUID = uuid.UUID(response_series.request_id)
@@ -1444,7 +1436,7 @@ class AbstractSingleRoundTripSequencer(AbstractSequencer):
     ):
         self._status_message_source.enqueue_status_message(
             severity=SeverityLabel.DEBUG,
-            message="{__class__.__name__}._responded()")
+            message=f"{__class__.__name__}._responded()")
         if self._report_response_series_and_errors(
             response_series=response_series,
             expected_types=[
@@ -1453,8 +1445,10 @@ class AbstractSingleRoundTripSequencer(AbstractSequencer):
         ):
             return
         if self._user_callback is not None:
-            kwargs = response_series.series[0].model_dump()
-            kwargs.pop("parsable_type")
+            # Create a "shallow dump" of the model - basically we want to preserve the nested data structures
+            keys: set[str] = set(response_series.series[0].__class__.model_fields.keys())
+            kwargs: dict[str, ...] = {
+                key: getattr(response_series.series[0], key) for key in keys if key != "parsable_type"}
             self._user_callback(component_label=response_series.responder, **kwargs)
         if len(self._pending_request_ids) > 0:
             return
@@ -1535,16 +1529,16 @@ DetectorCalibrationIntrinsicImageGetSequencer: type[AbstractSingleRoundTripSeque
         class_name="DetectorCalibrationIntrinsicImageGetSequencer",
         request_type=IntrinsicCalibrationImageGetRequest,
         response_type=IntrinsicCalibrationImageGetResponse)
-DetectorCalibrationIntrinsicImageMetadataListSequencer: type[AbstractSingleRoundTripSequencer] = \
-    AbstractSingleRoundTripSequencer.create_subclass(
-        class_name="DetectorCalibrationIntrinsicImageMetadataListSequencer",
-        request_type=IntrinsicCalibrationImageMetadataListRequest,
-        response_type=IntrinsicCalibrationImageMetadataListResponse)
 DetectorCalibrationIntrinsicImageMetadataUpdateSequencer: type[AbstractSingleRoundTripSequencer] = \
     AbstractSingleRoundTripSequencer.create_subclass(
         class_name="DetectorCalibrationIntrinsicImageMetadataUpdateSequencer",
         request_type=IntrinsicCalibrationImageMetadataUpdateRequest,
         response_type=EmptyResponse)
+DetectorCalibrationIntrinsicMetadataListSequencer: type[AbstractSingleRoundTripSequencer] = \
+    AbstractSingleRoundTripSequencer.create_subclass(
+        class_name="DetectorCalibrationIntrinsicMetadataListSequencer",
+        request_type=IntrinsicCalibrationMetadataListRequest,
+        response_type=IntrinsicCalibrationMetadataListResponse)
 DetectorCalibrationIntrinsicResolutionListSequencer: type[AbstractSingleRoundTripSequencer] = \
     AbstractSingleRoundTripSequencer.create_subclass(
         class_name="DetectorCalibrationIntrinsicResolutionListSequencer",
@@ -1560,11 +1554,6 @@ DetectorCalibrationIntrinsicResultGetActiveSequencer: type[AbstractSingleRoundTr
         class_name="DetectorCalibrationIntrinsicResultGetActiveSequencer",
         request_type=IntrinsicCalibrationResultGetActiveRequest,
         response_type=IntrinsicCalibrationResultGetActiveResponse)
-DetectorCalibrationIntrinsicResultMetadataListSequencer: type[AbstractSingleRoundTripSequencer] = \
-    AbstractSingleRoundTripSequencer.create_subclass(
-        class_name="DetectorCalibrationIntrinsicResultMetadataListSequencer",
-        request_type=IntrinsicCalibrationResultMetadataListRequest,
-        response_type=IntrinsicCalibrationResultMetadataListResponse)
 DetectorCalibrationIntrinsicResultMetadataUpdateSequencer: type[AbstractSingleRoundTripSequencer] = \
     AbstractSingleRoundTripSequencer.create_subclass(
         class_name="DetectorCalibrationIntrinsicResultMetadataUpdateSequencer",
@@ -1621,12 +1610,11 @@ AnyUserInitiatedSequencer: type[AbstractSingleRoundTripSequencer] = Union[
     DetectorCalibrationIntrinsicDeleteStagedSequencer,
     DetectorCalibrationIntrinsicImageAddSequencer,
     DetectorCalibrationIntrinsicImageGetSequencer,
-    DetectorCalibrationIntrinsicImageMetadataListSequencer,
+    DetectorCalibrationIntrinsicMetadataListSequencer,
     DetectorCalibrationIntrinsicImageMetadataUpdateSequencer,
     DetectorCalibrationIntrinsicResolutionListSequencer,
     DetectorCalibrationIntrinsicResultGetSequencer,
     DetectorCalibrationIntrinsicResultGetActiveSequencer,
-    DetectorCalibrationIntrinsicResultMetadataListSequencer,
     DetectorCalibrationIntrinsicResultMetadataUpdateSequencer,
     MixerCalibrationExtrinsicCalculateSequencer,
     MixerCalibrationExtrinsicDeleteStagedSequencer,

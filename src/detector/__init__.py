@@ -18,17 +18,15 @@ from .api import \
     IntrinsicCalibrationImageAddResponse, \
     IntrinsicCalibrationImageGetRequest, \
     IntrinsicCalibrationImageGetResponse, \
-    IntrinsicCalibrationImageMetadataListRequest, \
-    IntrinsicCalibrationImageMetadataListResponse, \
     IntrinsicCalibrationImageMetadataUpdateRequest, \
+    IntrinsicCalibrationMetadataListRequest, \
+    IntrinsicCalibrationMetadataListResponse, \
     IntrinsicCalibrationResolutionListRequest, \
     IntrinsicCalibrationResolutionListResponse, \
     IntrinsicCalibrationResultGetRequest, \
     IntrinsicCalibrationResultGetResponse, \
     IntrinsicCalibrationResultGetActiveRequest, \
     IntrinsicCalibrationResultGetActiveResponse, \
-    IntrinsicCalibrationResultMetadataListRequest, \
-    IntrinsicCalibrationResultMetadataListResponse, \
     IntrinsicCalibrationResultMetadataUpdateRequest, \
     DETECTOR_RESPONSE_TYPES
 from .detector import \

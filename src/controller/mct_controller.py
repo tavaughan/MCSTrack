@@ -12,12 +12,11 @@ from .sequencing import \
     DetectorCalibrationIntrinsicDeleteStagedSequencer, \
     DetectorCalibrationIntrinsicImageAddSequencer, \
     DetectorCalibrationIntrinsicImageGetSequencer, \
-    DetectorCalibrationIntrinsicImageMetadataListSequencer, \
     DetectorCalibrationIntrinsicImageMetadataUpdateSequencer, \
+    DetectorCalibrationIntrinsicMetadataListSequencer, \
     DetectorCalibrationIntrinsicResolutionListSequencer, \
     DetectorCalibrationIntrinsicResultGetSequencer, \
     DetectorCalibrationIntrinsicResultGetActiveSequencer, \
-    DetectorCalibrationIntrinsicResultMetadataListSequencer, \
     DetectorCalibrationIntrinsicResultMetadataUpdateSequencer, \
     DetectorFrameGetSequencer, \
     DetectorParametersGetSequencer, \
@@ -1093,36 +1092,6 @@ class MCTController:
             request_args={"image_identifier": image_identifier})
         return True
 
-    def calibrate_intrinsic_image_metadata_list(
-        self,
-        detector_label: str,
-        image_resolution: ImageResolution,
-        callback: Callable[[str, list[IntrinsicCalibrator.ImageMetadata]], None] | None = None
-    ) -> bool:
-        """
-        Start a specific user-initiated task. Check is_busy_with_user_task() before calling.
-
-        The Detector will return a list of data about the images that have been captured for calibration.
-        Among these data there will be a unique identifier for each image, as well as its resolution.
-        The images themselves are NOT returned since there may be many, and they may be large.
-
-        :param detector_label: label to which this shall apply
-        :param image_resolution: Resolution for which to calibrate (different resolutions do not mix)
-        :param callback: Callback args:
-            0 - component_label: str (detector)
-            1 - metadata_list: list[IntrinsicCalibrator.ImageMetadata]
-        :returns: True if no errors immediately occurred and the request was sent.
-        """
-        if not self._user_task_can_proceed_including_error_report():
-            return False
-        self._sequencers.user_sequencer = \
-            DetectorCalibrationIntrinsicImageMetadataListSequencer(**self._sequencer_init_args())
-        self._sequencers.user_sequencer.begin(
-            component_labels=[detector_label],
-            callback=callback,
-            request_args={"image_resolution": image_resolution})
-        return True
-
     def calibrate_intrinsic_image_metadata_update(
         self,
         detector_label: str,
@@ -1158,6 +1127,43 @@ class MCTController:
                 "image_identifier": image_identifier,
                 "image_state": str(image_state),
                 "image_label": image_label})
+        return True
+
+    def calibrate_intrinsic_metadata_list(
+        self,
+        detector_label: str,
+        image_resolution: ImageResolution,
+        callback: Callable[[
+                str,
+                list[IntrinsicCalibrator.ImageMetadata],
+                list[IntrinsicCalibrator.ResultMetadata]
+            ],None] | None = None
+    ) -> bool:
+        """
+        Start a specific user-initiated task. Check is_busy_with_user_task() before calling.
+
+        The Detector will return a list of data about the images that have been captured for calibration,
+        as well as the calibrations themselves.
+        Among these data there will be a unique identifier for each image and for each calibration,
+        as well as their resolutions.
+        The images themselves are NOT returned since there may be many, and they may be large.
+
+        :param detector_label: label to which this shall apply
+        :param image_resolution: Resolution for which to calibrate (different resolutions do not mix)
+        :param callback: Callback args:
+            0 - component_label: str (detector)
+            1 - image_metadata_list: list[IntrinsicCalibrator.ImageMetadata]
+            1 - result_metadata_list: list[IntrinsicCalibrator.ResultMetadata]
+        :returns: True if no errors immediately occurred and the request was sent.
+        """
+        if not self._user_task_can_proceed_including_error_report():
+            return False
+        self._sequencers.user_sequencer = \
+            DetectorCalibrationIntrinsicMetadataListSequencer(**self._sequencer_init_args())
+        self._sequencers.user_sequencer.begin(
+            component_labels=[detector_label],
+            callback=callback,
+            request_args={"image_resolution": image_resolution})
         return True
 
     def calibrate_intrinsic_resolution_list(
@@ -1247,40 +1253,11 @@ class MCTController:
             callback=callback)
         return True
 
-    def calibrate_intrinsic_result_metadata_list(
-        self,
-        detector_label: str,
-        image_resolution: ImageResolution,
-        callback: Callable[[str, list[IntrinsicCalibrator.ResultMetadata]], None] | None = None
-    ) -> bool:
-        """
-        Start a specific user-initiated task. Check is_busy_with_user_task() before calling.
-
-        The Detector will return a list of data about previously-calculated calibrations.
-        Among these data there will be a unique identifier for each result (calibration).
-
-        :param detector_label: label to which this shall apply
-        :param image_resolution: Resolution for which to calibrate (different resolutions do not mix)
-        :param callback: Callback args:
-            0 - component_label: str (detector)
-            1 - metadata_list: list[IntrinsicCalibrator.ResultMetadata]
-        :returns: True if no errors immediately occurred and the request was sent.
-        """
-        if not self._user_task_can_proceed_including_error_report():
-            return False
-        self._sequencers.user_sequencer = \
-            DetectorCalibrationIntrinsicResultMetadataListSequencer(**self._sequencer_init_args())
-        self._sequencers.user_sequencer.begin(
-            component_labels=[detector_label],
-            callback=callback,
-            request_args={"image_resolution": image_resolution})
-        return True
-
     def calibrate_intrinsic_result_metadata_update(
         self,
         detector_label: str,
         result_identifier: str,
-        result_state: IntrinsicCalibrator.ImageState,
+        result_state: IntrinsicCalibrator.ResultState,
         result_label: str | None,
         callback: Callable[[str], None] | None = None
     ) -> bool:

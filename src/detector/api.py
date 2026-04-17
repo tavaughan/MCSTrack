@@ -217,26 +217,6 @@ class IntrinsicCalibrationImageGetResponse(MCTResponse):
     image_base64: str = Field()
 
 
-class IntrinsicCalibrationImageMetadataListRequest(MCTRequest):
-    @staticmethod
-    def type_identifier() -> str:
-        return "detector_intrinsic_calibration_image_metadata_list"
-
-    parsable_type: str = Field(default=type_identifier())
-
-    image_resolution: ImageResolution = Field()
-
-
-class IntrinsicCalibrationImageMetadataListResponse(MCTResponse):
-    @staticmethod
-    def type_identifier() -> str:
-        return "detector_intrinsic_calibration_image_metadata_list"
-
-    parsable_type: str = Field(default=type_identifier())
-
-    metadata_list: list[IntrinsicCalibrator.ImageMetadata] = Field(default_factory=list)
-
-
 class IntrinsicCalibrationImageMetadataUpdateRequest(MCTRequest):
     @staticmethod
     def type_identifier() -> str:
@@ -247,6 +227,26 @@ class IntrinsicCalibrationImageMetadataUpdateRequest(MCTRequest):
     image_identifier: str = Field()
     image_state: IntrinsicCalibrator.ImageState = Field()
     image_label: str | None = Field(default=None)
+
+
+class IntrinsicCalibrationMetadataListRequest(MCTRequest):
+    @staticmethod
+    def type_identifier() -> str:
+        return "detector_intrinsic_calibration_metadata_list"
+
+    parsable_type: str = Field(default=type_identifier())
+
+    image_resolution: ImageResolution = Field()
+
+
+class IntrinsicCalibrationMetadataListResponse(MCTResponse):
+    @staticmethod
+    def type_identifier() -> str:
+        return "detector_intrinsic_calibration_metadata_list"
+
+    parsable_type: str = Field(default=type_identifier())
+    image_metadata_list: list[IntrinsicCalibrator.ImageMetadata] = Field(default_factory=list)
+    result_metadata_list: list[IntrinsicCalibrator.ResultMetadata] = Field(default_factory=list)
 
 
 class IntrinsicCalibrationResolutionListRequest(MCTRequest):
@@ -305,26 +305,6 @@ class IntrinsicCalibrationResultGetActiveResponse(MCTResponse):
     intrinsic_calibration: Optional[IntrinsicCalibration] = Field()
 
 
-class IntrinsicCalibrationResultMetadataListRequest(MCTRequest):
-    @staticmethod
-    def type_identifier() -> str:
-        return "detector_intrinsic_calibration_result_metadata_list"
-
-    parsable_type: str = Field(default=type_identifier())
-
-    image_resolution: ImageResolution = Field()
-
-
-class IntrinsicCalibrationResultMetadataListResponse(MCTResponse):
-    @staticmethod
-    def type_identifier() -> str:
-        return "detector_intrinsic_calibration_result_metadata_list"
-
-    parsable_type: str = Field(default=type_identifier())
-
-    metadata_list: list[IntrinsicCalibrator.ResultMetadata] = Field(default_factory=list)
-
-
 class IntrinsicCalibrationResultMetadataUpdateRequest(MCTRequest):
     @staticmethod
     def type_identifier() -> str:
@@ -349,9 +329,8 @@ DETECTOR_RESPONSE_TYPES: list[type[MCTResponse]] = [
     IntrinsicCalibrationCalculateResponse,
     IntrinsicCalibrationImageAddResponse,
     IntrinsicCalibrationImageGetResponse,
-    IntrinsicCalibrationImageMetadataListResponse,
+    IntrinsicCalibrationMetadataListResponse,
     IntrinsicCalibrationResolutionListResponse,
     IntrinsicCalibrationResultGetResponse,
     IntrinsicCalibrationResultGetActiveResponse,
-    IntrinsicCalibrationResultMetadataListResponse,
     TimestampGetResponse]
