@@ -1044,8 +1044,8 @@ class DetectorFrameGetSequencer(AbstractSequencer):
 
     data_by_detector_label: dict[str, OutputDetectorData]
 
-    _include_detected: bool
-    _include_rejected: bool
+    _include_annotations_detected: bool
+    _include_annotations_rejected: bool
     _include_image: bool
     _requested_image_resolution: ImageResolution | None
     _requested_image_format: ImageFormat
@@ -1100,8 +1100,8 @@ class DetectorFrameGetSequencer(AbstractSequencer):
             return
         self.reset()
         self._on_frame_callback = on_frame_callback
-        self._include_detected = include_detected
-        self._include_rejected = include_rejected
+        self._include_annotations_detected = include_detected
+        self._include_annotations_rejected = include_rejected
         self._include_image = include_image
         self._requested_image_format = requested_image_format
         self._requested_image_resolution = requested_image_resolution
@@ -1112,37 +1112,35 @@ class DetectorFrameGetSequencer(AbstractSequencer):
                 message=f"DetectorFrameGetSequencer - starting loop for detector {detector_label}")
             self._request_frame_get(detector_label=detector_label)
 
-    def enable_annotations_detected(self) -> None:
-        self._include_detected = True
+    def get_include_annotations_detected(self) -> bool:
+        return self._include_annotations_detected
 
-    def enable_annotations_rejected(self) -> None:
-        self._include_rejected = True
+    def get_include_annotations_rejected(self) -> bool:
+        return self._include_annotations_rejected
 
-    def enable_image_collection(
+    def get_include_images(self) -> bool:
+        return self._include_image
+
+    def set_include_annotations_detected(self, enabled: bool) -> None:
+        self._include_annotations_detected = enabled
+
+    def set_include_annotations_rejected(self, enabled: bool) -> None:
+        self._include_annotations_rejected = enabled
+
+    def set_include_images(
         self,
-        image_format: ImageFormat = ImageFormat.FORMAT_PNG,
+        enabled: bool,
+        image_format: ImageFormat = ImageFormat.FORMAT_JPG,
         image_resolution: ImageResolution | None = None
     ) -> None:
-        self._include_image = True
+        self._include_image = enabled
         self._requested_image_format = image_format
         self._requested_image_resolution = image_resolution
 
-    def disable_annotations_detected(self) -> None:
-        self._include_detected = False
-
-    def disable_annotations_rejected(self) -> None:
-        self._include_rejected = False
-
-    def disable_image_collection(self) -> None:
-        self._include_image = False
-
-    def includes_image(self) -> bool:
-        return self._include_image
-
     def reset(self) -> None:
         super().reset()
-        self._include_detected = False
-        self._include_rejected = False
+        self._include_annotations_detected = False
+        self._include_annotations_rejected = False
         self._include_image = False
         self._requested_image_resolution = None
         self._requested_image_format = ImageFormat.FORMAT_PNG
@@ -1154,8 +1152,8 @@ class DetectorFrameGetSequencer(AbstractSequencer):
             component_label=detector_label,
             requests=[
                 DetectorFrameGetRequest(
-                    include_detected=self._include_detected,
-                    include_rejected=self._include_rejected,
+                    include_detected=self._include_annotations_detected,
+                    include_rejected=self._include_annotations_rejected,
                     include_image=self._include_image,
                     image_format=self._requested_image_format,
                     image_resolution=self._requested_image_resolution),

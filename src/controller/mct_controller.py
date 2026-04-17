@@ -624,7 +624,40 @@ class MCTController:
                         severity=SeverityLabel.ERROR,
                         message=message)
 
-    def disable_detector_annotations_detected(self) -> bool:
+    def get_detector_includes_annotations_detected(self) -> bool:
+        """
+        :returns: True if Detectors are currently getting detected annotations, else False.
+        """
+        if not self._state == MCTController.State.RUNNING:
+            self._status_message_source.enqueue_status_message(
+                severity=SeverityLabel.WARNING,
+                message="Requesting frame properties when Detectors are not running. Call start_up() first.")
+            return False
+        return self._sequencers.detector_frame_get_sequencer.get_include_annotations_detected()
+
+    def get_detector_includes_annotations_rejected(self) -> bool:
+        """
+        :returns: True if Detectors are currently getting rejected annotations, else False.
+        """
+        if not self._state == MCTController.State.RUNNING:
+            self._status_message_source.enqueue_status_message(
+                severity=SeverityLabel.WARNING,
+                message="Requesting frame properties when Detectors are not running. Call start_up() first.")
+            return False
+        return self._sequencers.detector_frame_get_sequencer.get_include_annotations_rejected()
+
+    def get_detector_includes_images(self) -> bool:
+        """
+        :returns: True if Detectors are currently getting images, else False.
+        """
+        if not self._state == MCTController.State.RUNNING:
+            self._status_message_source.enqueue_status_message(
+                severity=SeverityLabel.WARNING,
+                message="Requesting frame properties when Detectors are not running. Call start_up() first.")
+            return False
+        return self._sequencers.detector_frame_get_sequencer.get_include_images()
+
+    def set_detector_includes_annotations_detected(self, enabled: bool) -> bool:
         """
         Indicate to Detectors to NOT include in their frames identified annotations.
         :returns: True if there were no immediate errors. False if unable to apply the setting.
@@ -634,10 +667,10 @@ class MCTController:
                 severity=SeverityLabel.ERROR,
                 message="Cannot change frame properties until the controller is running. Call start_up() first.")
             return True
-        self._sequencers.detector_frame_get_sequencer.disable_annotations_detected()
+        self._sequencers.detector_frame_get_sequencer.set_include_annotations_detected(enabled=enabled)
         return True
 
-    def disable_detector_annotations_rejected(self) -> bool:
+    def set_detector_includes_annotations_rejected(self, enabled: bool) -> bool:
         """
         Indicate to Detectors to NOT include in their frames unidentified annotations.
         :returns: True if there were no immediate errors. False if unable to apply the setting.
@@ -647,10 +680,15 @@ class MCTController:
                 severity=SeverityLabel.ERROR,
                 message="Cannot change frame properties until the controller is running. Call start_up() first.")
             return True
-        self._sequencers.detector_frame_get_sequencer.disable_annotations_detected()
+        self._sequencers.detector_frame_get_sequencer.set_include_annotations_rejected(enabled=enabled)
         return True
 
-    def disable_detector_image_collection(self) -> bool:
+    def set_detector_includes_images(
+        self,
+        enabled: bool,
+        image_format: ImageFormat = ImageFormat.FORMAT_JPG,
+        image_resolution: ImageResolution | None = None
+    ) -> bool:
         """
         Indicate to Detectors that they shall NOT include in their frames its camera image.
         :returns: True if there were no immediate errors. False if unable to apply the setting.
@@ -660,66 +698,11 @@ class MCTController:
                 severity=SeverityLabel.ERROR,
                 message="Cannot change frame properties until the controller is running. Call start_up() first.")
             return True
-        self._sequencers.detector_frame_get_sequencer.disable_image_collection()
-        return True
-
-    def enable_detector_annotations_detected(self) -> bool:
-        """
-        Indicate to Detectors that they shall include in their frames identified annotations.
-        :returns: True if there were no immediate errors. False if unable to apply the setting.
-        """
-        if not self._state == MCTController.State.RUNNING:
-            self._status_message_source.enqueue_status_message(
-                severity=SeverityLabel.ERROR,
-                message="Cannot change frame properties until the controller is running. Call start_up() first.")
-            return True
-        self._sequencers.detector_frame_get_sequencer.enable_annotations_detected()
-        return True
-
-    def enable_detector_annotations_rejected(self) -> bool:
-        """
-        Indicate to Detectors that they shall include in their frames unidentified annotations.
-        :returns: True if there were no immediate errors. False if unable to apply the setting.
-        """
-        if not self._state == MCTController.State.RUNNING:
-            self._status_message_source.enqueue_status_message(
-                severity=SeverityLabel.ERROR,
-                message="Cannot change frame properties until the controller is running. Call start_up() first.")
-            return True
-        self._sequencers.detector_frame_get_sequencer.enable_annotations_rejected()
-        return True
-
-    def enable_detector_image_collection(
-        self,
-        image_format: ImageFormat = ImageFormat.FORMAT_PNG,
-        image_resolution: ImageResolution | None = None
-    ) -> bool:
-        """
-        Indicate to Detectors that they shall include in their frames their camera images.
-        :param image_format: Request images in a specific format (JPG, PNG)
-        :param image_resolution: Request Detector to scale the image to a specific resolution. None means no scaling.
-        :returns: True if there were no immediate errors. False if unable to apply the setting.
-        """
-        if not self._state == MCTController.State.RUNNING:
-            self._status_message_source.enqueue_status_message(
-                severity=SeverityLabel.ERROR,
-                message="Cannot change frame properties until the controller is running. Call start_up() first.")
-            return True
-        self._sequencers.detector_frame_get_sequencer.enable_image_collection(
+        self._sequencers.detector_frame_get_sequencer.set_include_images(
+            enabled=enabled,
             image_format=image_format,
             image_resolution=image_resolution)
         return True
-
-    def is_detector_image_collection_enabled(self):
-        """
-        :returns: True if Detectors are currently getting images, else False.
-        """
-        if not self._state == MCTController.State.RUNNING:
-            self._status_message_source.enqueue_status_message(
-                severity=SeverityLabel.WARNING,
-                message="Requesting image collection when Detectors are not running. Call start_up() first.")
-            return False
-        return self._sequencers.detector_frame_get_sequencer.includes_image()
 
     def _sequencer_init_args(self):
         """

@@ -6,6 +6,7 @@ from src.common import \
     MCTAnnotatorRuntimeError, \
     StatusMessageSource
 import datetime
+import numpy
 
 
 class MockAnnotator(Annotator):
@@ -56,12 +57,22 @@ class MockAnnotator(Annotator):
             raise MCTAnnotatorRuntimeError(
                 message=f"The following parameters could not be applied due to key mismatch: {str(mismatched_keys)}")
 
-    def update(self, image) -> None:
-        self._annotations_detected = list()
+    def update(
+        self,
+        image: numpy.ndarray
+    ) -> None:
+        half_height_px: int = image.shape[0] // 2
+        half_width_px: int = image.shape[1] // 2
+        self._annotations_detected = [
+            Annotation(
+                feature_label=f"Mock{Annotation.RELATION_CHARACTER}{number}",
+                x_px=(half_width_px if 1 <= number <= 2 else 0),
+                y_px=(number//2) * half_height_px)
+            for number in range(0,4)]
         self._annotations_rejected = [
             Annotation(
                 feature_label=f"{Annotation.UNIDENTIFIED_LABEL}{Annotation.RELATION_CHARACTER}{number}",
-                x_px=(1 if 1 <= number <= 2 else 0)+1,
-                y_px=(number//2)+1)
+                x_px=(half_width_px if 1 <= number <= 2 else 0) + half_width_px,
+                y_px=(number//2) * half_height_px + half_height_px)
             for number in range(0,4)]
         self._update_timestamp_utc = datetime.datetime.now(tz=datetime.timezone.utc)

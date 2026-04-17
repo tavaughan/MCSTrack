@@ -117,8 +117,6 @@ class MockCamera(Camera):
 
     def update(self) -> None:
         now_timestamp_utc: datetime.datetime = datetime.datetime.now(tz=datetime.timezone.utc)
-
-
         if self._image is None:
             message: str = "Failed to grab frame."
             self.add_status_message(
@@ -126,8 +124,7 @@ class MockCamera(Camera):
                 message=message)
             self.set_status(Camera.Status.FAILURE)
             raise MCTCameraRuntimeError(message=message)
-
-        self._image_timestamp_utc = datetime.datetime.now(tz=datetime.timezone.utc)
+        self._image_timestamp_utc = now_timestamp_utc
 
     def _generate_image(self):
         self._image = numpy.full(

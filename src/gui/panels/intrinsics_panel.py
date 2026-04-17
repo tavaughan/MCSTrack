@@ -39,7 +39,6 @@ from src.detector import \
 from io import BytesIO
 import logging
 from typing import Optional
-import uuid
 import wx
 import wx.grid
 
@@ -53,13 +52,15 @@ class IntrinsicsPanel(BasePanel):
 
     _detector_selector: ParameterSelector
     _detector_resolution_selector: ParameterSelector
-    _detector_load_button: wx.Button
+    _live_preview_button: wx.Button
+    _capture_button: wx.Button
+    _calibrate_button: wx.Button
+    _calibrate_status_textbox: wx.TextCtrl
+    _load_metadata_button: wx.Button
     _image_table: CalibrationImageTable
     _image_label_textbox: ParameterText
     _image_state_selector: ParameterSelector
     _image_update_button: wx.Button
-    _calibrate_button: wx.Button
-    _calibrate_status_textbox: wx.TextCtrl
     _result_table: CalibrationResultTable
     _result_display_textbox: wx.TextCtrl
     _result_label_textbox: ParameterText
@@ -67,9 +68,7 @@ class IntrinsicsPanel(BasePanel):
     _result_update_button: wx.Button
     _image_panel: ImagePanel
 
-    _control_blocking_request_id: uuid.UUID | None
-    _is_updating: bool  # Some things should only trigger during explicit user events
-    _calibration_in_progress: bool
+    _awaiting_user_task: bool
     _force_last_result_selected: bool
     _detector_resolutions: list[ImageResolution]
     _image_metadata_list: list[IntrinsicCalibrator.ImageMetadata]
@@ -86,9 +85,7 @@ class IntrinsicsPanel(BasePanel):
             name=name)
         self._controller = controller
 
-        self._control_blocking_request_id = None
-        self._is_updating = False
-        self._calibration_in_progress = False
+        self._awaiting_user_task = False
         self._force_last_result_selected = False
         self._detector_resolutions = list()
         self._image_metadata_list = list()
@@ -123,17 +120,31 @@ class IntrinsicsPanel(BasePanel):
             label="Resolution",
             selectable_values=list())
 
-        self._detector_load_button: wx.Button = self.add_control_button(
+        self._calibrate_button: wx.Button = self.add_control_button(
             parent=control_panel,
             sizer=control_sizer,
-            label="Load Metadata")
+            label="Calibrate")
+
+        self._calibrate_status_textbox = wx.TextCtrl(
+            parent=control_panel,
+            style=wx.TE_READONLY | wx.TE_RICH)
+        self._calibrate_status_textbox.SetEditable(False)
+        self._calibrate_status_textbox.SetBackgroundColour(colour=wx.Colour(red=249, green=249, blue=249, alpha=255))
+        control_sizer.Add(
+            window=self._calibrate_status_textbox,
+            flags=wx.SizerFlags(0).Expand())
 
         self.add_horizontal_line_to_spacer(
             parent=control_panel,
             sizer=control_sizer)
 
+        self._load_metadata_button: wx.Button = self.add_control_button(
+            parent=control_panel,
+            sizer=control_sizer,
+            label="Load Metadata")
+
         self._image_table = CalibrationImageTable(parent=control_panel)
-        self._image_table.SetMaxSize((-1, self._image_table.GetSize().GetHeight()))
+        self._image_table.SetMaxSize(size=wx.Size(-1, self._image_table.GetSize().GetHeight()))
         control_sizer.Add(
             window=self._image_table,
             flags=wx.SizerFlags(0).Expand())
@@ -154,28 +165,6 @@ class IntrinsicsPanel(BasePanel):
             parent=control_panel,
             sizer=control_sizer,
             label="Update Image")
-
-        self.add_horizontal_line_to_spacer(
-            parent=control_panel,
-            sizer=control_sizer)
-
-        self._calibrate_button: wx.Button = self.add_control_button(
-            parent=control_panel,
-            sizer=control_sizer,
-            label="Calibrate")
-
-        self._calibrate_status_textbox = wx.TextCtrl(
-            parent=control_panel,
-            style=wx.TE_READONLY | wx.TE_RICH)
-        self._calibrate_status_textbox.SetEditable(False)
-        self._calibrate_status_textbox.SetBackgroundColour(colour=wx.Colour(red=249, green=249, blue=249, alpha=255))
-        control_sizer.Add(
-            window=self._calibrate_status_textbox,
-            flags=wx.SizerFlags(0).Expand())
-
-        self.add_horizontal_line_to_spacer(
-            parent=control_panel,
-            sizer=control_sizer)
 
         self._result_table = CalibrationResultTable(parent=control_panel)
         control_sizer.Add(
@@ -240,7 +229,7 @@ class IntrinsicsPanel(BasePanel):
         self._detector_resolution_selector.selector.Bind(
             event=wx.EVT_CHOICE,
             handler=self._on_detector_resolution_selected)
-        self._detector_load_button.Bind(
+        self._load_metadata_button.Bind(
             event=wx.EVT_BUTTON,
             handler=self._on_detector_load_pressed)
         self._image_table.table.Bind(
@@ -535,7 +524,7 @@ class IntrinsicsPanel(BasePanel):
     def _update_ui_controls(self) -> None:
         self._detector_selector.Enable(False)
         self._detector_resolution_selector.Enable(False)
-        self._detector_load_button.Enable(False)
+        self._load_metadata_button.Enable(False)
         self._image_table.Enable(False)
         self._image_label_textbox.Enable(False)
         self._image_label_textbox.textbox.SetValue(str())
@@ -560,7 +549,7 @@ class IntrinsicsPanel(BasePanel):
         resolution: str = self._detector_resolution_selector.selector.GetStringSelection()
         if len(resolution) <= 0:
             return
-        self._detector_load_button.Enable(True)
+        self._load_metadata_button.Enable(True)
         # == NO RETURN GUARDS AFTER THIS POINT ==
         if len(self._image_metadata_list) > 0:
             self._image_table.Enable(True)

@@ -15,6 +15,12 @@ ColorMode = Literal["color", "greyscale"]
 class Annotation(BaseModel):
     """
     A distinct point as detected on a detector image.
+    The feature_label consists of two parts: the base, and the suffix.
+    The base is a str indicating to which object the annotation belongs.
+    The sequence_number is an int indicating which part of that object this annotation represents.
+    The two parts are separated by the RELATION_CHARACTER.
+    An empty feature_label (or at least, empty base label) indicates
+    that a feature may exist but could not be identified.
     """
 
     # These can denote that multiple landmarks are related if they share the same
@@ -29,11 +35,19 @@ class Annotation(BaseModel):
 
     def base_feature_label(self) -> str:
         """
-        Part of the label before the RELATION_CHARACTER.
+        Part of the label before the RELATION_CHARACTER. If RELATION_CHARACTER is not present, returns the whole label.
         """
         if self.RELATION_CHARACTER not in self.feature_label:
             return self.feature_label
         return self.feature_label[0:self.feature_label.index(self.RELATION_CHARACTER)]
+
+    def sequence_number(self) -> int:
+        """
+        Part of the label after the RELATION_CHARACTER. If RELATION_CHARACTER is not present, returns 0.
+        """
+        if self.RELATION_CHARACTER not in self.feature_label:
+            return 0
+        return int(self.feature_label[self.feature_label.index(self.RELATION_CHARACTER)+1:])
 
 
 class ImageFormat(StrEnum):
