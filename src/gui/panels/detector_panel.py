@@ -33,9 +33,9 @@ def _marker_snapshot_list_to_opencv_points(
 ) -> numpy.ndarray:
     if len(marker_snapshot_list) <= 0:
         return numpy.asarray([], dtype=numpy.int32)
-    return_value: list[list[list[(float, float)]]] = list()
+    return_value: list[list[list[float]]] = list()
     current_base_label: str | None = None
-    current_shape_points: list[list[(float, float)]] | None = None
+    current_shape_points: list[list[float]] | None = None
     for marker_snapshot in marker_snapshot_list:
         annotation_base_label = marker_snapshot.base_feature_label()
         # TODO: This is not robust when multiple unknown annotations are reported.
@@ -50,7 +50,7 @@ def _marker_snapshot_list_to_opencv_points(
             marker_snapshot.x_px * scale,
             marker_snapshot.y_px * scale])
     return_value.append(current_shape_points)
-    return_value = numpy.asarray(return_value, dtype=numpy.int32)
+    return_value: numpy.ndarray = numpy.asarray(return_value, dtype=numpy.int32)
     return return_value
 
 
@@ -280,8 +280,8 @@ class DetectorPanel(BasePanel):
             scaled_resolution: ImageResolution | None = None
             if base_resolution is not None:
                 scaled_resolution = ImageResolution(
-                    x_px=self._preview_scale_factor.get_value() * base_resolution.x_px,
-                    y_px=self._preview_scale_factor.get_value() * base_resolution.y_px)
+                    x_px=round(self._preview_scale_factor.get_value() * base_resolution.x_px),
+                    y_px=round(self._preview_scale_factor.get_value() * base_resolution.y_px))
             self._controller.enable_detector_image_collection(
                 image_format=ImageFormat.FORMAT_JPG,
                 image_resolution=scaled_resolution)
@@ -369,8 +369,10 @@ class DetectorPanel(BasePanel):
 
     def _update_ui_image(self):
         display_image: numpy.ndarray
+        panel_size: wx.Size = self._image_panel.GetSize()
+        panel_size_tuple: tuple[int, int] = (panel_size.x, panel_size.y)
         if not self._preview_image_checkbox.checkbox.GetValue():
-            display_image = ImageUtils.black_image(resolution_px=self._image_panel.GetSize())
+            display_image = ImageUtils.black_image(resolution_px=panel_size_tuple)
         else:
             selected_detector_label: str = self._detector_selector.selector.GetStringSelection()
             detector_live_data: MCTController.DetectorLiveData = \
@@ -381,15 +383,14 @@ class DetectorPanel(BasePanel):
                 opencv_image: numpy.ndarray = ImageUtils.base64_to_image(input_base64=detector_frame.image_base64)
                 display_image: numpy.ndarray = ImageUtils.image_resize_to_fit(
                     opencv_image=opencv_image,
-                    available_size=self._image_panel.GetSize())
+                    available_size=panel_size_tuple)
                 cv2.cvtColor(display_image, cv2.COLOR_RGB2BGR, display_image)
                 scale: float = self._preview_scale_factor.get_value() * display_image.shape[0] / opencv_image.shape[0]
             else:
-                display_image = ImageUtils.black_image(resolution_px=self._image_panel.GetSize())
-                panel_size_px: tuple[int, int] = self._image_panel.GetSize()
+                display_image = ImageUtils.black_image(resolution_px=panel_size_tuple)
                 rescaled_resolution_px: tuple[int, int] = ImageUtils.scale_factor_for_available_space_px(
                     source_resolution_px=(detector_frame.image_resolution.x_px, detector_frame.image_resolution.y_px),
-                    available_size_px=panel_size_px)
+                    available_size_px=panel_size_tuple)
                 scale: float = rescaled_resolution_px[1] / detector_frame.image_resolution.y_px
 
             if scale is not None:
@@ -422,8 +423,9 @@ class DetectorPanel(BasePanel):
                         color=[127, 191, 255],  # orange in BGR
                         thickness=2)
 
-        image_buffer: bytes = ImageUtils.image_to_bytes(image_data=display_image, image_format=".jpg")
+        image_buffer: bytes = ImageUtils.image_to_bytes(image_data=display_image, image_format=ImageFormat.FORMAT_JPG)
         image_buffer_io: BytesIO = BytesIO(image_buffer)
+        # noinspection PyTypeChecker
         wx_image: wx.Image = wx.Image(image_buffer_io)
         wx_bitmap: wx.Bitmap = wx_image.ConvertToBitmap()
         self._image_panel.set_bitmap(wx_bitmap)

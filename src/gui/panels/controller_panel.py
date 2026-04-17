@@ -47,7 +47,7 @@ class ControllerPanel(BasePanel):
         control_panel.SetScrollRate(
             xstep=1,
             ystep=1)
-        control_border_panel.SetMinSize(size=(_CONTROL_MIN_WIDTH_PX, 0))
+        control_border_panel.SetMinSize(size=wx.Size(_CONTROL_MIN_WIDTH_PX, 0))
         control_panel.ShowScrollbars(
             horz=wx.SHOW_SB_NEVER,
             vert=wx.SHOW_SB_ALWAYS)
