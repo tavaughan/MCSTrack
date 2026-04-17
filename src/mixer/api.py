@@ -85,24 +85,6 @@ class ExtrinsicCalibrationImageGetResponse(MCTResponse):
     image_base64: str = Field()
 
 
-class ExtrinsicCalibrationImageMetadataListRequest(MCTRequest):
-    @staticmethod
-    def type_identifier() -> str:
-        return "mixer_extrinsic_calibration_image_metadata_list"
-
-    parsable_type: str = Field(default=type_identifier())
-
-
-class ExtrinsicCalibrationImageMetadataListResponse(MCTResponse):
-    @staticmethod
-    def type_identifier() -> str:
-        return "mixer_extrinsic_calibration_image_metadata_list"
-
-    parsable_type: str = Field(default=type_identifier())
-
-    metadata_list: list[ExtrinsicCalibrator.ImageMetadata] = Field(default_factory=list)
-
-
 class ExtrinsicCalibrationImageMetadataUpdateRequest(MCTRequest):
     @staticmethod
     def type_identifier() -> str:
@@ -113,6 +95,25 @@ class ExtrinsicCalibrationImageMetadataUpdateRequest(MCTRequest):
     image_identifier: str = Field()
     image_state: ExtrinsicCalibrator.ImageState = Field()
     image_label: str | None = Field(default=None)
+
+
+class ExtrinsicCalibrationMetadataListRequest(MCTRequest):
+    @staticmethod
+    def type_identifier() -> str:
+        return "mixer_extrinsic_calibration_image_metadata_list"
+
+    parsable_type: str = Field(default=type_identifier())
+
+
+class ExtrinsicCalibrationMetadataListResponse(MCTResponse):
+    @staticmethod
+    def type_identifier() -> str:
+        return "mixer_extrinsic_calibration_image_metadata_list"
+
+    parsable_type: str = Field(default=type_identifier())
+
+    image_metadata_list: list[ExtrinsicCalibrator.ImageMetadata] = Field(default_factory=list)
+    result_metadata_list: list[ExtrinsicCalibrator.ResultMetadata] = Field(default_factory=list)
 
 
 class ExtrinsicCalibrationResultGetRequest(MCTRequest):
@@ -151,24 +152,6 @@ class ExtrinsicCalibrationResultGetActiveResponse(MCTResponse):
     parsable_type: str = Field(default=type_identifier())
 
     extrinsic_calibration: ExtrinsicCalibration | None = Field()
-
-
-class ExtrinsicCalibrationResultMetadataListRequest(MCTRequest):
-    @staticmethod
-    def type_identifier() -> str:
-        return "mixer_extrinsic_calibration_result_metadata_list"
-
-    parsable_type: str = Field(default=type_identifier())
-
-
-class ExtrinsicCalibrationResultMetadataListResponse(MCTResponse):
-    @staticmethod
-    def type_identifier() -> str:
-        return "mixer_extrinsic_calibration_result_metadata_list"
-
-    parsable_type: str = Field(default=type_identifier())
-
-    metadata_list: list[ExtrinsicCalibrator.ResultMetadata] = Field(default_factory=list)
 
 
 class ExtrinsicCalibrationResultMetadataUpdateRequest(MCTRequest):
@@ -355,10 +338,9 @@ MIXER_RESPONSE_TYPES: list[type[MCTResponse]] = [
     ExtrinsicCalibrationCalculateResponse,
     ExtrinsicCalibrationImageAddResponse,
     ExtrinsicCalibrationImageGetResponse,
-    ExtrinsicCalibrationImageMetadataListResponse,
+    ExtrinsicCalibrationMetadataListResponse,
     ExtrinsicCalibrationResultGetResponse,
     ExtrinsicCalibrationResultGetActiveResponse,
-    ExtrinsicCalibrationResultMetadataListResponse,
     PoseSolverPosesGetResponse,
     PoseSolverTargetAddResponse,
     MixerFrameGetResponse,

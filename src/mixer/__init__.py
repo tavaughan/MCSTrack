@@ -7,15 +7,13 @@ from .api import \
     ExtrinsicCalibrationImageAddResponse, \
     ExtrinsicCalibrationImageGetRequest, \
     ExtrinsicCalibrationImageGetResponse, \
-    ExtrinsicCalibrationImageMetadataListRequest, \
-    ExtrinsicCalibrationImageMetadataListResponse, \
     ExtrinsicCalibrationImageMetadataUpdateRequest, \
+    ExtrinsicCalibrationMetadataListRequest, \
+    ExtrinsicCalibrationMetadataListResponse, \
     ExtrinsicCalibrationResultGetActiveRequest, \
     ExtrinsicCalibrationResultGetActiveResponse, \
     ExtrinsicCalibrationResultGetRequest, \
     ExtrinsicCalibrationResultGetResponse, \
-    ExtrinsicCalibrationResultMetadataListRequest, \
-    ExtrinsicCalibrationResultMetadataListResponse, \
     ExtrinsicCalibrationResultMetadataUpdateRequest, \
     PoseSolverDetectorFrameAddRequest, \
     PoseSolverExtrinsicClearRequest, \

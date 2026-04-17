@@ -35,13 +35,11 @@ from src.mixer import \
     ExtrinsicCalibrationImageAddResponse, \
     ExtrinsicCalibrationImageGetRequest, \
     ExtrinsicCalibrationImageGetResponse, \
-    ExtrinsicCalibrationImageMetadataListRequest, \
-    ExtrinsicCalibrationImageMetadataListResponse, \
     ExtrinsicCalibrationImageMetadataUpdateRequest, \
+    ExtrinsicCalibrationMetadataListRequest, \
+    ExtrinsicCalibrationMetadataListResponse, \
     ExtrinsicCalibrationResultGetRequest, \
     ExtrinsicCalibrationResultGetResponse, \
-    ExtrinsicCalibrationResultMetadataListRequest, \
-    ExtrinsicCalibrationResultMetadataListResponse, \
     ExtrinsicCalibrationResultMetadataUpdateRequest, \
     MixerIntrinsicUpdateRequest
 import datetime
@@ -308,10 +306,8 @@ class ExtrinsicsPanel(BasePanel):
                 self._handle_response_extrinsic_calibration_image_get(response=response)
             elif isinstance(response, ExtrinsicCalibrationResultGetResponse):
                 self._handle_response_extrinsic_calibration_result_get(response=response)
-            elif isinstance(response, ExtrinsicCalibrationImageMetadataListResponse):
+            elif isinstance(response, ExtrinsicCalibrationMetadataListResponse):
                 self._handle_response_extrinsic_calibration_image_metadata_list(response=response)
-            elif isinstance(response, ExtrinsicCalibrationResultMetadataListResponse):
-                self._handle_response_extrinsic_calibration_result_metadata_list(response=response)
             elif isinstance(response, IntrinsicCalibrationResultGetActiveResponse):
                 self._handle_response_intrinsic_calibration_result_get_active(
                     response=response,
@@ -386,7 +382,7 @@ class ExtrinsicsPanel(BasePanel):
                 image_base64=response.image_base64,
                 detector_label=detector_label,
                 timestamp_utc_iso8601=self._current_capture_timestamp.isoformat()),
-            ExtrinsicCalibrationImageMetadataListRequest()])
+            ExtrinsicCalibrationMetadataListRequest()])
         self._control_blocking_request_ids.add(self._controller.send_custom_request(
             component_label=mixer_label,
             request_series=request_series))
@@ -403,7 +399,7 @@ class ExtrinsicsPanel(BasePanel):
                 intrinsic_parameters=response.intrinsic_calibration.calibrated_values)])
         if len(self._control_blocking_request_ids) <= 0:  # This is the last intrinsic - we are ready to calculate
             request_series.series.append(ExtrinsicCalibrationCalculateRequest())
-            request_series.series.append(ExtrinsicCalibrationResultMetadataListRequest())
+            # request_series.series.append(ExtrinsicCalibrationResultMetadataListRequest())
         self._control_blocking_request_ids.add(self._controller.send_custom_request(
             component_label=mixer_label,
             request_series=request_series))
@@ -437,7 +433,7 @@ class ExtrinsicsPanel(BasePanel):
 
     def _handle_response_extrinsic_calibration_image_metadata_list(
         self,
-        response: ExtrinsicCalibrationImageMetadataListResponse
+        response: ExtrinsicCalibrationMetadataListResponse
     ) -> None:
         self._image_metadata_list = response.metadata_list
         self._image_table.update_contents(row_contents=self._image_metadata_list)
@@ -450,7 +446,7 @@ class ExtrinsicsPanel(BasePanel):
 
     def _handle_response_extrinsic_calibration_result_metadata_list(
         self,
-        response: ExtrinsicCalibrationResultMetadataListResponse
+        response  # : ExtrinsicCalibrationResultMetadataListResponse
     ) -> None:
         self._result_metadata_list = response.metadata_list
         self._result_table.update_contents(row_contents=self._result_metadata_list)
@@ -462,8 +458,8 @@ class ExtrinsicsPanel(BasePanel):
         self._result_display_textbox.SetValue(str())
         mixer_label: str = self._mixer_selector.selector.GetStringSelection()
         request_series: MCTRequestSeries = MCTRequestSeries(series=[
-            ExtrinsicCalibrationImageMetadataListRequest(),
-            ExtrinsicCalibrationResultMetadataListRequest()])
+            ExtrinsicCalibrationMetadataListRequest()])
+            # ExtrinsicCalibrationResultMetadataListRequest()
         self._control_blocking_request_ids.add(self._controller.send_custom_request(
             component_label=mixer_label,
             request_series=request_series))
@@ -528,7 +524,7 @@ class ExtrinsicsPanel(BasePanel):
                 image_state=image_state,
                 image_label=image_label),
             ExtrinsicCalibrationDeleteStagedRequest(),
-            ExtrinsicCalibrationImageMetadataListRequest()])
+            ExtrinsicCalibrationMetadataListRequest()])
         self._control_blocking_request_ids.add(self._controller.send_custom_request(
             component_label=mixer_label,
             request_series=request_series))
@@ -563,8 +559,8 @@ class ExtrinsicsPanel(BasePanel):
                 result_identifier=result_identifier,
                 result_state=result_state,
                 result_label=result_label),
-            ExtrinsicCalibrationDeleteStagedRequest(),
-            ExtrinsicCalibrationResultMetadataListRequest()])
+            ExtrinsicCalibrationDeleteStagedRequest()])
+            # ExtrinsicCalibrationResultMetadataListRequest()
         self._control_blocking_request_ids.add(self._controller.send_custom_request(
             component_label=mixer_label,
             request_series=request_series))

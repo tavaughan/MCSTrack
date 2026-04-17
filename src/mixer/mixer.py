@@ -6,15 +6,13 @@ from .api import \
     ExtrinsicCalibrationImageAddResponse, \
     ExtrinsicCalibrationImageGetRequest, \
     ExtrinsicCalibrationImageGetResponse, \
-    ExtrinsicCalibrationImageMetadataListRequest, \
-    ExtrinsicCalibrationImageMetadataListResponse, \
     ExtrinsicCalibrationImageMetadataUpdateRequest, \
+    ExtrinsicCalibrationMetadataListRequest, \
+    ExtrinsicCalibrationMetadataListResponse, \
     ExtrinsicCalibrationResultGetActiveRequest, \
     ExtrinsicCalibrationResultGetActiveResponse, \
     ExtrinsicCalibrationResultGetRequest, \
     ExtrinsicCalibrationResultGetResponse, \
-    ExtrinsicCalibrationResultMetadataListRequest, \
-    ExtrinsicCalibrationResultMetadataListResponse, \
     ExtrinsicCalibrationResultMetadataUpdateRequest, \
     PoseSolverDetectorFrameAddRequest, \
     PoseSolverExtrinsicClearRequest, \
@@ -165,14 +163,18 @@ class Mixer(MCTComponent):
     def extrinsic_calibrator_image_metadata_list(
         self,
         **_kwargs
-    ) -> ExtrinsicCalibrationImageMetadataListResponse | ErrorResponse:
+    ) -> ExtrinsicCalibrationMetadataListResponse | ErrorResponse:
         image_metadata_list: list[ExtrinsicCalibrator.ImageMetadata]
+        result_metadata_list: list[ExtrinsicCalibrator.ResultMetadata]
         try:
             image_metadata_list = self._extrinsic_calibrator.list_image_metadata()
+            result_metadata_list = self._extrinsic_calibrator.list_result_metadata()
         except MCTCalibrationError as e:
             logger.error(e.private_message)
             return ErrorResponse(message=e.public_message)
-        return ExtrinsicCalibrationImageMetadataListResponse(metadata_list=image_metadata_list)
+        return ExtrinsicCalibrationMetadataListResponse(
+            image_metadata_list=image_metadata_list,
+            result_metadata_list=result_metadata_list)
 
     def extrinsic_calibrator_image_metadata_update(
         self,
@@ -222,18 +224,6 @@ class Mixer(MCTComponent):
             logger.error(e.private_message)
             return ErrorResponse(message=e.public_message)
         return ExtrinsicCalibrationResultGetResponse(extrinsic_calibration=calibration)
-
-    def extrinsic_calibrator_result_metadata_list(
-        self,
-        **_kwargs
-    ) -> ExtrinsicCalibrationResultMetadataListResponse | ErrorResponse:
-        result_metadata_list: list[ExtrinsicCalibrator.ResultMetadata]
-        try:
-            result_metadata_list = self._extrinsic_calibrator.list_result_metadata()
-        except MCTCalibrationError as e:
-            logger.error(e.private_message)
-            return ErrorResponse(message=e.public_message)
-        return ExtrinsicCalibrationResultMetadataListResponse(metadata_list=result_metadata_list)
 
     def extrinsic_calibrator_result_metadata_update(
         self,
@@ -370,11 +360,10 @@ class Mixer(MCTComponent):
             ExtrinsicCalibrationDeleteStagedRequest: self.extrinsic_calibrator_delete_staged,
             ExtrinsicCalibrationImageAddRequest: self.extrinsic_calibrator_image_add,
             ExtrinsicCalibrationImageGetRequest: self.extrinsic_calibrator_image_get,
-            ExtrinsicCalibrationImageMetadataListRequest: self.extrinsic_calibrator_image_metadata_list,
+            ExtrinsicCalibrationMetadataListRequest: self.extrinsic_calibrator_image_metadata_list,
             ExtrinsicCalibrationImageMetadataUpdateRequest: self.extrinsic_calibrator_image_metadata_update,
             ExtrinsicCalibrationResultGetActiveRequest: self.extrinsic_calibrator_result_get_active,
             ExtrinsicCalibrationResultGetRequest: self.extrinsic_calibrator_result_get,
-            ExtrinsicCalibrationResultMetadataListRequest: self.extrinsic_calibrator_result_metadata_list,
             ExtrinsicCalibrationResultMetadataUpdateRequest: self.extrinsic_calibrator_result_metadata_update,
             MixerFrameGetRequest: self.mixer_frame_get,
             MixerIntrinsicUpdateRequest: self.mixer_update_intrinsic_parameters,

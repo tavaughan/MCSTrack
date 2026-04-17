@@ -27,11 +27,10 @@ from .sequencing import \
     MixerCalibrationExtrinsicDeleteStagedSequencer, \
     MixerCalibrationExtrinsicImageAddSequencer, \
     MixerCalibrationExtrinsicImageGetSequencer, \
-    MixerCalibrationExtrinsicImageMetadataListSequencer, \
     MixerCalibrationExtrinsicImageMetadataUpdateSequencer, \
+    MixerCalibrationExtrinsicMetadataListSequencer, \
     MixerCalibrationExtrinsicResultGetActiveSequencer, \
     MixerCalibrationExtrinsicResultGetSequencer, \
-    MixerCalibrationExtrinsicResultMetadataListSequencer, \
     MixerCalibrationExtrinsicResultMetadataUpdateSequencer, \
     MixerFrameGetSequencer, \
     MixerShutdownSequencer, \
@@ -1144,7 +1143,7 @@ class MCTController:
 
         The Detector will return a list of data about the images that have been captured for calibration,
         as well as the calibrations themselves.
-        Among these data there will be a unique identifier for each image and for each calibration,
+        Among these data there will be a unique identifier for each image and for each result (calibration),
         as well as their resolutions.
         The images themselves are NOT returned since there may be many, and they may be large.
 
@@ -1414,33 +1413,6 @@ class MCTController:
             request_args={"image_identifier": image_identifier})
         return True
 
-    def calibrate_extrinsic_image_metadata_list(
-        self,
-        mixer_label: str,
-        callback: Callable[[str, list[ExtrinsicCalibrator.ImageMetadata]], None] | None = None
-    ) -> bool:
-        """
-        Start a specific user-initiated task. Check is_busy_with_user_task() before calling.
-
-        The Mixer will return a list of data about the images that have been captured for calibration.
-        Among these data there will be a unique identifier for each image.
-        The images themselves are NOT returned since there may be many, and they may be large.
-
-        :param mixer_label: label to which this shall apply
-        :param callback: Callback args:
-            0 - component_label: str (mixer)
-            1 - metadata_list: list[ExtrinsicCalibrator.ImageMetadata]
-        :returns: True if no errors immediately occurred and the request was sent.
-        """
-        if not self._user_task_can_proceed_including_error_report():
-            return False
-        self._sequencers.user_sequencer = \
-            MixerCalibrationExtrinsicImageMetadataListSequencer(**self._sequencer_init_args())
-        self._sequencers.user_sequencer.begin(
-            component_labels=[mixer_label],
-            callback=callback)
-        return True
-
     def calibrate_extrinsic_image_metadata_update(
         self,
         mixer_label: str,
@@ -1476,6 +1448,34 @@ class MCTController:
                 "image_identifier": image_identifier,
                 "image_state": str(image_state),
                 "image_label": image_label})
+        return True
+
+    def calibrate_extrinsic_metadata_list(
+        self,
+        mixer_label: str,
+        callback: Callable[[str, list[ExtrinsicCalibrator.ImageMetadata]], None] | None = None
+    ) -> bool:
+        """
+        Start a specific user-initiated task. Check is_busy_with_user_task() before calling.
+
+        The Mixer will return a list of data about the images and calibrations that have been created.
+        Among these data there will be a unique identifier for each image and for each result (calibration).
+        The images themselves are NOT returned since there may be many, and they may be large.
+
+        :param mixer_label: label to which this shall apply
+        :param callback: Callback args:
+            0 - component_label: str (mixer)
+            1 - image_metadata_list: list[ExtrinsicCalibrator.ImageMetadata]
+            1 - result_metadata_list: list[ExtrinsicCalibrator.ResultMetadata]
+        :returns: True if no errors immediately occurred and the request was sent.
+        """
+        if not self._user_task_can_proceed_including_error_report():
+            return False
+        self._sequencers.user_sequencer = \
+            MixerCalibrationExtrinsicMetadataListSequencer(**self._sequencer_init_args())
+        self._sequencers.user_sequencer.begin(
+            component_labels=[mixer_label],
+            callback=callback)
         return True
 
     def calibrate_extrinsic_result_get(
@@ -1531,32 +1531,6 @@ class MCTController:
             return False
         self._sequencers.user_sequencer = \
             MixerCalibrationExtrinsicResultGetActiveSequencer(**self._sequencer_init_args())
-        self._sequencers.user_sequencer.begin(
-            component_labels=[mixer_label],
-            callback=callback)
-        return True
-
-    def calibrate_extrinsic_result_metadata_list(
-        self,
-        mixer_label: str,
-        callback: Callable[[str, list[ExtrinsicCalibrator.ResultMetadata]], None] | None = None
-    ) -> bool:
-        """
-        Start a specific user-initiated task. Check is_busy_with_user_task() before calling.
-
-        The Mixer will return a list of data about previously-calculated calibrations.
-        Among these data there will be a unique identifier for each result (calibration).
-
-        :param mixer_label: label to which this shall apply
-        :param callback: Callback args:
-            0 - component_label: str (mixer)
-            1 - metadata_list: list[ExtrinsicCalibrator.ResultMetadata]
-        :returns: True if no errors immediately occurred and the request was sent.
-        """
-        if not self._user_task_can_proceed_including_error_report():
-            return False
-        self._sequencers.user_sequencer = \
-            MixerCalibrationExtrinsicResultMetadataListSequencer(**self._sequencer_init_args())
         self._sequencers.user_sequencer.begin(
             component_labels=[mixer_label],
             callback=callback)

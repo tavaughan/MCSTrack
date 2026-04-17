@@ -65,15 +65,13 @@ from src.mixer import \
     ExtrinsicCalibrationImageAddResponse, \
     ExtrinsicCalibrationImageGetRequest, \
     ExtrinsicCalibrationImageGetResponse, \
-    ExtrinsicCalibrationImageMetadataListRequest, \
-    ExtrinsicCalibrationImageMetadataListResponse, \
     ExtrinsicCalibrationImageMetadataUpdateRequest, \
+    ExtrinsicCalibrationMetadataListRequest, \
+    ExtrinsicCalibrationMetadataListResponse, \
     ExtrinsicCalibrationResultGetActiveRequest, \
     ExtrinsicCalibrationResultGetActiveResponse, \
     ExtrinsicCalibrationResultGetRequest, \
     ExtrinsicCalibrationResultGetResponse, \
-    ExtrinsicCalibrationResultMetadataListRequest, \
-    ExtrinsicCalibrationResultMetadataListResponse, \
     ExtrinsicCalibrationResultMetadataUpdateRequest, \
     Mixer, \
     MixerFrameGetRequest, \
@@ -1575,16 +1573,16 @@ MixerCalibrationExtrinsicImageGetSequencer: type[AbstractSingleRoundTripSequence
         class_name="MixerCalibrationExtrinsicImageGetSequencer",
         request_type=ExtrinsicCalibrationImageGetRequest,
         response_type=ExtrinsicCalibrationImageGetResponse)
-MixerCalibrationExtrinsicImageMetadataListSequencer: type[AbstractSingleRoundTripSequencer] = \
-    AbstractSingleRoundTripSequencer.create_subclass(
-        class_name="MixerCalibrationExtrinsicImageMetadataListSequencer",
-        request_type=ExtrinsicCalibrationImageMetadataListRequest,
-        response_type=ExtrinsicCalibrationImageMetadataListResponse)
 MixerCalibrationExtrinsicImageMetadataUpdateSequencer: type[AbstractSingleRoundTripSequencer] = \
     AbstractSingleRoundTripSequencer.create_subclass(
         class_name="MixerCalibrationExtrinsicImageMetadataUpdateSequencer",
         request_type=ExtrinsicCalibrationImageMetadataUpdateRequest,
         response_type=EmptyResponse)
+MixerCalibrationExtrinsicMetadataListSequencer: type[AbstractSingleRoundTripSequencer] = \
+    AbstractSingleRoundTripSequencer.create_subclass(
+        class_name="MixerCalibrationExtrinsicMetadataListSequencer",
+        request_type=ExtrinsicCalibrationMetadataListRequest,
+        response_type=ExtrinsicCalibrationMetadataListResponse)
 MixerCalibrationExtrinsicResultGetActiveSequencer: type[AbstractSingleRoundTripSequencer] = \
     AbstractSingleRoundTripSequencer.create_subclass(
         class_name="MixerCalibrationExtrinsicResultGetActiveSequencer",
@@ -1595,11 +1593,6 @@ MixerCalibrationExtrinsicResultGetSequencer: type[AbstractSingleRoundTripSequenc
         class_name="MixerCalibrationExtrinsicResultGetSequencer",
         request_type=ExtrinsicCalibrationResultGetRequest,
         response_type=ExtrinsicCalibrationResultGetResponse)
-MixerCalibrationExtrinsicResultMetadataListSequencer: type[AbstractSingleRoundTripSequencer] = \
-    AbstractSingleRoundTripSequencer.create_subclass(
-        class_name="MixerCalibrationExtrinsicResultMetadataListSequencer",
-        request_type=ExtrinsicCalibrationResultMetadataListRequest,
-        response_type=ExtrinsicCalibrationResultMetadataListResponse)
 MixerCalibrationExtrinsicResultMetadataUpdateSequencer: type[AbstractSingleRoundTripSequencer] = \
     AbstractSingleRoundTripSequencer.create_subclass(
         class_name="MixerCalibrationExtrinsicResultMetadataUpdateSequencer",
@@ -1610,19 +1603,18 @@ AnyUserInitiatedSequencer: type[AbstractSingleRoundTripSequencer] = Union[
     DetectorCalibrationIntrinsicDeleteStagedSequencer,
     DetectorCalibrationIntrinsicImageAddSequencer,
     DetectorCalibrationIntrinsicImageGetSequencer,
-    DetectorCalibrationIntrinsicMetadataListSequencer,
     DetectorCalibrationIntrinsicImageMetadataUpdateSequencer,
+    DetectorCalibrationIntrinsicMetadataListSequencer,
     DetectorCalibrationIntrinsicResolutionListSequencer,
     DetectorCalibrationIntrinsicResultGetSequencer,
     DetectorCalibrationIntrinsicResultGetActiveSequencer,
     DetectorCalibrationIntrinsicResultMetadataUpdateSequencer,
     MixerCalibrationExtrinsicCalculateSequencer,
     MixerCalibrationExtrinsicDeleteStagedSequencer,
-    MixerCalibrationExtrinsicImageAddSequencer, \
+    MixerCalibrationExtrinsicImageAddSequencer,
     MixerCalibrationExtrinsicImageGetSequencer,
-    MixerCalibrationExtrinsicImageMetadataListSequencer,
     MixerCalibrationExtrinsicImageMetadataUpdateSequencer,
+    MixerCalibrationExtrinsicMetadataListSequencer,
     MixerCalibrationExtrinsicResultGetSequencer,
     MixerCalibrationExtrinsicResultGetActiveSequencer,
-    MixerCalibrationExtrinsicResultMetadataListSequencer,
     MixerCalibrationExtrinsicResultMetadataUpdateSequencer]
