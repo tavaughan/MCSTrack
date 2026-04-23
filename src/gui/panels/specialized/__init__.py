@@ -5,6 +5,6 @@ from .detector_single_frame_panel import DetectorSingleFramePanel
 from .detector_multi_frame_panel import DetectorMultiFramePanel
 from .graphics_renderer import GraphicsRenderer
 from .log_panel import LogPanel
-from .tracking_table import \
-    TrackingTable, \
+from .target_table import \
+    TargetTable, \
     TrackingTableRow

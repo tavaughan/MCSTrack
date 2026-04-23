@@ -529,10 +529,7 @@ class ExtrinsicsPanel(BasePanel):
             self._update_ui_controls()
             self._awaiting_user_task = True
         selected_mixer_label: str = self._mixer_selector.selector.GetStringSelection()
-        if (
-            (selected_mixer_label is not None) and
-            (len(selected_mixer_label) > 0)
-        ):
+        if selected_mixer_label is not None and len(selected_mixer_label) > 0:
             if self._preview_toggle_button.GetValue():
                 detector_labels: list[str] = self._controller.get_remote_labels_detectors()
                 images_base64: list[str] = [

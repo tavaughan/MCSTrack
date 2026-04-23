@@ -1377,7 +1377,7 @@ class MCTController:
             MixerCalibrationExtrinsicImageAddSequencer(**self._sequencer_init_args())
         # noinspection PyArgumentList
         self._sequencers.user_sequencer.begin(
-            component_labels=[mixer_label],
+            mixer_labels=[mixer_label],
             image_base64_by_detector_label={
                 detector_label: detector_data.frame.image_base64
                 for detector_label, detector_data in self._detector_live_data.items()},

@@ -119,6 +119,15 @@ class ControllerFrame(wx.Frame):
             select=False)
         self._panels.add(self._extrinsics_panel)
 
+        self._pose_solver_panel = PoseSolverPanel(
+            parent=self._notebook,
+            controller=self._controller)
+        self._notebook.AddPage(
+            page=self._pose_solver_panel,
+            text=POSE_SOLVER_LABEL,
+            select=False)
+        self._panels.add(self._pose_solver_panel)
+
         # self._board_builder_panel = BoardBuilderPanel(
         #     parent=self._notebook,
         #     controller=self._controller)
@@ -127,15 +136,6 @@ class ControllerFrame(wx.Frame):
         #     text=BOARD_BUILDER_LABEL,
         #     select=False)
         # self._panels.add(self._board_builder_panel)
-        #
-        # self._pose_solver_panel = PoseSolverPanel(
-        #     parent=self._notebook,
-        #     controller=self._controller)
-        # self._notebook.AddPage(
-        #     page=self._pose_solver_panel,
-        #     text=POSE_SOLVER_LABEL,
-        #     select=False)
-        # self._panels.add(self._pose_solver_panel)
 
         self._notebook.Bind(
             event=wx.EVT_BOOKCTRL_PAGE_CHANGED,

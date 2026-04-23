@@ -21,7 +21,8 @@ class TrackingTableRow(BaseModel):
     z: float = Field()
 
 
-class TrackingTable(RowSelectionTable[TrackingTableRow]):
+class TargetTable(RowSelectionTable[TrackingTableRow]):
+
     def __init__(
         self,
         parent: wx.Window,
@@ -31,6 +32,14 @@ class TrackingTable(RowSelectionTable[TrackingTableRow]):
             parent=parent,
             col_labels=_COL_LABELS,
             height_px=height_px)
+
+    def get_selected_target_label(self) -> str | None:
+        row_indices: list[int] = self.table.GetSelectedRows()
+        if len(row_indices) <= 0:
+            return None
+        return self.table.GetCellValue(
+            row=row_indices[0],
+            col=_COL_IDX_LABEL)
 
     def _set_row_contents(
         self,
