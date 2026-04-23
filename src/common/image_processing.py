@@ -199,16 +199,17 @@ class ImageUtils:
         width_cells: int = 1
         height_cells: int = 1
         cell_count: int = width_cells * height_cells
-        max_cell_count: int = 1000  # I don't think we'll ever get this high, but I want a theoretical iteration limit
-        while cell_count <= max_cell_count:
-            width_cells += 1
-            cell_count = width_cells * height_cells
-            if cell_count >= partition_count:
-                break
-            height_cells += 1
-            cell_count = width_cells * height_cells
-            if cell_count >= partition_count:
-                break
+        if partition_count > 1:
+            max_cell_count: int = 1000  # unlikely to ever get this high, but this gives a theoretical iteration limit
+            while cell_count <= max_cell_count:
+                width_cells += 1
+                cell_count = width_cells * height_cells
+                if cell_count >= partition_count:
+                    break
+                height_cells += 1
+                cell_count = width_cells * height_cells
+                if cell_count >= partition_count:
+                    break
         width_px: int = available_size_px[0] // width_cells
         height_px: int = available_size_px[1] // height_cells
         positions_px: list[tuple[int, int]] = list()

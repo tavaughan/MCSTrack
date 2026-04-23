@@ -283,7 +283,7 @@ class BasePanel(wx.Panel):
         font: wx.Font = line.GetFont()
         if font_size_delta is not None:
             font.SetPointSize(pointSize=font.GetPointSize() + font_size_delta)
-        if bold is True:
+        if bold:
             font.MakeBold()
         line.SetFont(font)
         sizer.Add(

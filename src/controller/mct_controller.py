@@ -1453,7 +1453,11 @@ class MCTController:
     def calibrate_extrinsic_metadata_list(
         self,
         mixer_label: str,
-        callback: Callable[[str, list[ExtrinsicCalibrator.ImageMetadata]], None] | None = None
+        callback: Callable[[
+                str,
+                list[ExtrinsicCalibrator.ImageMetadata],
+                list[ExtrinsicCalibrator.ResultMetadata]],
+            None] | None = None
     ) -> bool:
         """
         Start a specific user-initiated task. Check is_busy_with_user_task() before calling.
@@ -1540,7 +1544,7 @@ class MCTController:
         self,
         mixer_label: str,
         result_identifier: str,
-        result_state: ExtrinsicCalibrator.ImageState,
+        result_state: ExtrinsicCalibrator.ResultState,
         result_label: str | None,
         callback: Callable[[str], None] | None = None
     ) -> bool:

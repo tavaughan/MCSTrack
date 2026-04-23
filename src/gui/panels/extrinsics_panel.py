@@ -1,53 +1,22 @@
 from .base_panel import \
     BasePanel
-from .feedback import \
-    ImagePanel
 from .parameters import \
     ParameterSelector, \
     ParameterText
 from .specialized import \
     CalibrationImageTable, \
-    CalibrationResultTable
+    CalibrationResultTable, \
+    DetectorMultiFramePanel
 from src.common import \
-    ErrorResponse, \
-    EmptyResponse, \
+    ExtrinsicCalibration, \
     ExtrinsicCalibrator, \
     ImageFormat, \
-    ImageResolution, \
-    ImageUtils, \
-    IntrinsicCalibrator, \
-    MCTRequestSeries, \
-    MCTResponse, \
-    MCTResponseSeries, \
+    SeverityLabel, \
     StatusMessageSource
 from src.controller import \
     MCTController
-from src.detector import \
-    CameraImageGetRequest, \
-    CameraImageGetResponse, \
-    IntrinsicCalibrationResultGetActiveRequest, \
-    IntrinsicCalibrationResultGetActiveResponse
-from src.mixer import \
-    ExtrinsicCalibrationCalculateRequest, \
-    ExtrinsicCalibrationCalculateResponse, \
-    ExtrinsicCalibrationDeleteStagedRequest, \
-    ExtrinsicCalibrationImageAddRequest, \
-    ExtrinsicCalibrationImageAddResponse, \
-    ExtrinsicCalibrationImageGetRequest, \
-    ExtrinsicCalibrationImageGetResponse, \
-    ExtrinsicCalibrationImageMetadataUpdateRequest, \
-    ExtrinsicCalibrationMetadataListRequest, \
-    ExtrinsicCalibrationMetadataListResponse, \
-    ExtrinsicCalibrationResultGetRequest, \
-    ExtrinsicCalibrationResultGetResponse, \
-    ExtrinsicCalibrationResultMetadataUpdateRequest, \
-    MixerIntrinsicUpdateRequest
-import datetime
-from io import BytesIO
 import logging
 import numpy
-from typing import Optional
-import uuid
 import wx
 import wx.grid
 
@@ -59,52 +28,49 @@ _PREVIEW_CAPTURE_FORMAT: ImageFormat = ImageFormat.FORMAT_JPG
 class ExtrinsicsPanel(BasePanel):
 
     _controller: MCTController
+    _status_message_source: StatusMessageSource
 
     _mixer_selector: ParameterSelector
-    _reload_button: wx.Button
     _preview_toggle_button: wx.ToggleButton
     _capture_button: wx.Button
+    _calibrate_button: wx.Button
+    _calibrate_status_textbox: wx.TextCtrl
+    _reload_metadata_button: wx.Button
     _image_table: CalibrationImageTable
     _image_label_textbox: ParameterText
     _image_state_selector: ParameterSelector
     _image_update_button: wx.Button
-    _calibrate_button: wx.Button
-    _calibrate_status_textbox: wx.TextCtrl
     _result_table: CalibrationResultTable
     _result_display_textbox: wx.TextCtrl
     _result_label_textbox: ParameterText
     _result_state_selector: ParameterSelector
     _result_update_button: wx.Button
-    _image_panel: ImagePanel
+    _delete_staged_button: wx.Button
+    _preview_panel: DetectorMultiFramePanel
 
-    _control_blocking_request_ids: set[uuid.UUID]
-    _is_updating: bool  # Some things should only trigger during explicit user events
-    _preview_request_ids_by_detector_label: dict[str, uuid.UUID]
-    _preview_images_by_detector_label: dict[str, numpy.ndarray]
+    _awaiting_user_task: bool
+    _metadata_needs_update: bool
+    _force_last_result_selected: bool
+    _image_metadata_list: list[ExtrinsicCalibrator.ImageMetadata]
+    _result_metadata_list: list[ExtrinsicCalibrator.ResultMetadata]
+
     _extrinsic_image: numpy.ndarray | None
-    _current_capture_timestamp: datetime.datetime | None  # None indicates no capture in progress
-    _calibration_in_progress: bool
-    _image_metadata_list: list[IntrinsicCalibrator.ImageMetadata]
-    _result_metadata_list: list[IntrinsicCalibrator.ResultMetadata]
 
     def __init__(
         self,
         parent: wx.Window,
         controller: MCTController,
-        name: str = "IntrinsicsPanel"
+        name: str = "ExtrinsicsPanel"
     ):
         super().__init__(
             parent=parent,
             name=name)
         self._controller = controller
+        self._status_message_source = controller.get_status_message_source()
 
-        self._control_blocking_request_ids = set()
-        self._is_updating = False
-        self._preview_request_ids_by_detector_label = dict()
-        self._preview_images_by_detector_label = dict()
-        self._extrinsic_image = None
-        self._current_capture_timestamp = None
-        self._calibration_in_progress = False
+        self._awaiting_user_task = False
+        self._metadata_needs_update = False
+        self._force_last_result_selected = False
         self._image_metadata_list = list()
         self._result_metadata_list = list()
 
@@ -131,14 +97,9 @@ class ExtrinsicsPanel(BasePanel):
             label="Mixer",
             selectable_values=list())
 
-        self._reload_button = self.add_control_button(
-            parent=control_panel,
-            sizer=control_sizer,
-            label="Reload Metadata")
-
         self._preview_toggle_button = wx.ToggleButton(
             parent=control_panel,
-            label="Preview")
+            label="Preview Images")
         control_sizer.Add(
             window=self._preview_toggle_button,
             flags=wx.SizerFlags(0).Expand())
@@ -147,7 +108,7 @@ class ExtrinsicsPanel(BasePanel):
         self._capture_button = self.add_control_button(
             parent=control_panel,
             sizer=control_sizer,
-            label="Capture")
+            label="Capture Calibration Images")
 
         self._calibrate_button: wx.Button = self.add_control_button(
             parent=control_panel,
@@ -167,8 +128,13 @@ class ExtrinsicsPanel(BasePanel):
             parent=control_panel,
             sizer=control_sizer)
 
+        self._reload_metadata_button = self.add_control_button(
+            parent=control_panel,
+            sizer=control_sizer,
+            label="Reload Metadata")
+
         self._image_table = CalibrationImageTable(parent=control_panel)
-        self._image_table.SetMaxSize((-1, self._image_table.GetSize().GetHeight()))
+        self._image_table.SetMaxSize(size=wx.Size(-1, self._image_table.GetSize().GetHeight()))
         control_sizer.Add(
             window=self._image_table,
             flags=wx.SizerFlags(0).Expand())
@@ -183,16 +149,12 @@ class ExtrinsicsPanel(BasePanel):
             parent=control_panel,
             sizer=control_sizer,
             label="Image State",
-            selectable_values=[state.name for state in IntrinsicCalibrator.ImageState])
+            selectable_values=[state.name for state in ExtrinsicCalibrator.ImageState])
 
         self._image_update_button: wx.Button = self.add_control_button(
             parent=control_panel,
             sizer=control_sizer,
             label="Update Image")
-
-        self.add_horizontal_line_to_spacer(
-            parent=control_panel,
-            sizer=control_sizer)
 
         self._result_table = CalibrationResultTable(parent=control_panel)
         control_sizer.Add(
@@ -218,12 +180,21 @@ class ExtrinsicsPanel(BasePanel):
             parent=control_panel,
             sizer=control_sizer,
             label="Result State",
-            selectable_values=[state.name for state in IntrinsicCalibrator.ResultState])
+            selectable_values=[state.name for state in ExtrinsicCalibrator.ResultState])
 
         self._result_update_button: wx.Button = self.add_control_button(
             parent=control_panel,
             sizer=control_sizer,
             label="Update Result")
+
+        self.add_horizontal_line_to_spacer(
+            parent=control_panel,
+            sizer=control_sizer)
+
+        self._delete_staged_button: wx.Button = self.add_control_button(
+            parent=control_panel,
+            sizer=control_sizer,
+            label="Delete Staged")
 
         self.add_horizontal_line_to_spacer(
             parent=control_panel,
@@ -243,335 +214,342 @@ class ExtrinsicsPanel(BasePanel):
             window=control_border_panel,
             flags=wx.SizerFlags(50).Expand())
 
-        self._image_panel = ImagePanel(parent=self)
-        self._image_panel.SetBackgroundColour(colour=wx.BLACK)
+        self._preview_panel = DetectorMultiFramePanel(parent=self)
+        self._preview_panel.SetBackgroundColour(colour=wx.BLACK)
         horizontal_split_sizer.Add(
-            window=self._image_panel,
+            window=self._preview_panel,
             flags=wx.SizerFlags(50).Expand())
 
         self.SetSizerAndFit(sizer=horizontal_split_sizer)
 
         self._mixer_selector.selector.Bind(
             event=wx.EVT_CHOICE,
-            handler=self._on_mixer_reload)
-        self._reload_button.Bind(
-            event=wx.EVT_BUTTON,
-            handler=self._on_mixer_reload)
+            handler=self._on_ui_mixer_selected)
         self._preview_toggle_button.Bind(
-            event=wx.EVT_BUTTON,
-            handler=self._on_preview_toggled)
+            event=wx.EVT_TOGGLEBUTTON,
+            handler=self._on_ui_preview_toggled)
         self._capture_button.Bind(
             event=wx.EVT_BUTTON,
-            handler=self._on_capture_pressed)
+            handler=self._on_ui_capture_pressed)
         self._calibrate_button.Bind(
             event=wx.EVT_BUTTON,
-            handler=self._on_calibrate_pressed)
+            handler=self._on_ui_calibrate_pressed)
+        self._reload_metadata_button.Bind(
+            event=wx.EVT_BUTTON,
+            handler=self._on_ui_metadata_reload_pressed)
         self._image_table.table.Bind(
             event=wx.grid.EVT_GRID_SELECT_CELL,
-            handler=self._on_image_metadata_selected)
+            handler=self._on_ui_image_metadata_selected)
         self._image_update_button.Bind(
             event=wx.EVT_BUTTON,
-            handler=self._on_image_update_pressed)
+            handler=self._on_ui_image_update_pressed)
         self._result_table.table.Bind(
             event=wx.grid.EVT_GRID_SELECT_CELL,
-            handler=self._on_result_metadata_selected)
+            handler=self._on_ui_result_metadata_selected)
         self._result_update_button.Bind(
             event=wx.EVT_BUTTON,
-            handler=self._on_result_update_pressed)
-
-    def handle_error_response(
-        self,
-        response: ErrorResponse
-    ):
-        super().handle_error_response(response=response)
-        if self._calibration_in_progress:
-            self._calibrate_status_textbox.SetForegroundColour(colour=wx.Colour(red=127, green=0, blue=0, alpha=255))
-            self._calibrate_status_textbox.SetValue(f"Error: {response.message}")
-
-    def handle_response_series(
-        self,
-        response_series: MCTResponseSeries,
-        task_description: Optional[str] = None,
-        expected_response_count: Optional[int] = None
-    ) -> None:
-        response: MCTResponse
-        for response in response_series.series:
-            if isinstance(response, CameraImageGetResponse):
-                self._handle_response_camera_image_get(response=response, detector_label=response_series.responder)
-            elif isinstance(response, ExtrinsicCalibrationCalculateResponse):
-                self._handle_response_extrinsic_calibration_calculate(response=response)
-            elif isinstance(response, ExtrinsicCalibrationImageAddResponse):
-                self._handle_response_extrinsic_calibration_image_add(response=response)
-            elif isinstance(response, ExtrinsicCalibrationImageGetResponse):
-                self._handle_response_extrinsic_calibration_image_get(response=response)
-            elif isinstance(response, ExtrinsicCalibrationResultGetResponse):
-                self._handle_response_extrinsic_calibration_result_get(response=response)
-            elif isinstance(response, ExtrinsicCalibrationMetadataListResponse):
-                self._handle_response_extrinsic_calibration_image_metadata_list(response=response)
-            elif isinstance(response, IntrinsicCalibrationResultGetActiveResponse):
-                self._handle_response_intrinsic_calibration_result_get_active(
-                    response=response,
-                    detector_label=response_series.responder)
-            elif isinstance(response, ErrorResponse):
-                self.handle_error_response(response=response)
-            elif not isinstance(response, EmptyResponse):
-                self.handle_unknown_response(response=response)
+            handler=self._on_ui_result_update_pressed)
+        self._delete_staged_button.Bind(
+            event=wx.EVT_BUTTON,
+            handler=self._on_ui_delete_staged_pressed)
 
     def on_ui_page_select(self) -> None:
         super().on_ui_page_select()
+        selected_mixer_label: str = self._mixer_selector.selector.GetStringSelection()
         available_mixer_labels: list[str] = self._controller.get_remote_labels_mixer()
         self._mixer_selector.set_options(option_list=available_mixer_labels)
+        if selected_mixer_label in available_mixer_labels:
+            self._mixer_selector.selector.SetStringSelection(selected_mixer_label)
+        else:
+            self._mixer_selector.selector.SetStringSelection(str())
         self._update_ui_controls()
 
-    def update_loop(self) -> None:
-        super().update_loop()
-        self._is_updating = True
+    def on_ui_page_deselect(self) -> None:
+        super().on_ui_page_deselect()
+        # Some cleanup in case settings were changed.
+        self._controller.set_detector_includes_images(False)
+        self._controller.set_detector_includes_annotations_detected(True)
+        self._controller.set_detector_includes_annotations_rejected(False)
 
-        response_series: MCTResponseSeries | None
-        responded_request_ids: list[tuple[uuid.UUID, MCTResponseSeries]] = list()
-        for request_id in self._control_blocking_request_ids:
-            _, response_series = self._controller.response_series_pop(request_series_id=request_id)
-            if response_series is not None:
-                responded_request_ids.append((request_id, response_series))
-        if len(responded_request_ids) > 0:
-            # Clean up the request id list first
-            for request_id, response_series in responded_request_ids:
-                self._control_blocking_request_ids.remove(request_id)
-            # THEN handle the responses. This order of ops is assumed in calibration handling.
-            for request_id, response_series in responded_request_ids:
-                self.handle_response_series(response_series)
-            self._update_ui_controls()
+    def _on_ui_calibrate_pressed(self, _event: wx.CommandEvent) -> None:
+        # TODO: Need to sync intrinsics or calibration may be incorrect
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_ui_calibrate_pressed called.")
+        self._calibrate_status_textbox.SetForegroundColour(colour=wx.Colour(red=0, green=0, blue=0, alpha=255))
+        self._calibrate_status_textbox.SetValue("Calibrating...")
+        self._result_display_textbox.SetValue(str())
+        selected_mixer_label: str = self._mixer_selector.selector.GetStringSelection()
+        self._controller.calibrate_extrinsic_calculate(
+            mixer_label=selected_mixer_label,
+            callback=self._on_response_calibrate)
+        self._awaiting_user_task = True
+        self._update_ui_controls()
 
-        if self._preview_toggle_button.GetValue():
-            detector_labels_with_responses: set[str] = set()
-            for detector_label, request_id in self._preview_request_ids_by_detector_label.items():
-                _, response_series = self._controller.response_series_pop(request_series_id=request_id)
-                if response_series is not None and \
-                   len(response_series.series) > 0 and \
-                   isinstance(response_series.series[0], CameraImageGetResponse):
-                    response: CameraImageGetResponse = response_series.series[0]
-                    self._preview_images_by_detector_label[detector_label] = \
-                        ImageUtils.base64_to_image(response.image_base64)
-                    detector_labels_with_responses.add(detector_label)
-            detector_labels: list[str] = self._controller.get_remote_labels_detectors()
-            for detector_label in detector_labels:
-                if detector_label in detector_labels_with_responses or \
-                   detector_label not in self._preview_request_ids_by_detector_label:
-                    request_series: MCTRequestSeries = MCTRequestSeries(
-                        series=[CameraImageGetRequest(
-                            format=_PREVIEW_CAPTURE_FORMAT,
-                            requested_resolution=ImageResolution(x_px=800, y_px=480))])  # TODO: Parameterize
-                    preview_request_id = self._controller.send_custom_request(
-                        component_label=detector_label,
-                        request_series=request_series)
-                    self._preview_request_ids_by_detector_label[detector_label] = preview_request_id
+    def _on_ui_capture_pressed(self, _event: wx.CommandEvent) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_ui_capture_pressed called.")
+        selected_mixer_label: str = self._mixer_selector.selector.GetStringSelection()
+        self._controller.calibrate_extrinsic_image_add(
+            mixer_label=selected_mixer_label,
+            callback=self._on_response_image_add)
+        self._awaiting_user_task = True
+        self._update_ui_controls()
 
-        self._update_ui_image()
+    def _on_ui_delete_staged_pressed(self, _event: wx.CommandEvent) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_ui_delete_staged_pressed called.")
+        selected_mixer_label: str = self._mixer_selector.selector.GetStringSelection()
+        self._controller.calibrate_extrinsic_delete_staged(
+            mixer_label=selected_mixer_label,
+            callback=self._on_response_delete_staged)
+        self._awaiting_user_task = True
+        self._update_ui_controls()
 
-        self._is_updating = False
+    def _on_ui_image_metadata_selected(self, _event: wx.grid.GridEvent) -> None:
+        if self._awaiting_user_task:
+            return  # Not initiated by user
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_ui_image_metadata_selected called.")
+        image_index: int = self._image_table.get_selected_row_index()
+        image_identifier: str | None = self._image_metadata_list[image_index].identifier
+        if image_identifier is not None:
+            selected_mixer_label: str = self._mixer_selector.selector.GetStringSelection()
+            self._controller.calibrate_extrinsic_image_get(
+                mixer_label=selected_mixer_label,
+                image_identifier=image_identifier,
+                callback=self._on_response_image_get)
+            self._awaiting_user_task = True
+        self._update_ui_controls()
 
-    def _handle_response_camera_image_get(
-        self,
-        response: CameraImageGetResponse,
-        detector_label: str
-    ) -> None:
-        # Note: This is for the control-blocking requests ONLY!
-        mixer_label: str = self._mixer_selector.selector.GetStringSelection()
-        request_series: MCTRequestSeries = MCTRequestSeries(series=[
-            ExtrinsicCalibrationImageAddRequest(
-                image_base64=response.image_base64,
-                detector_label=detector_label,
-                timestamp_utc_iso8601=self._current_capture_timestamp.isoformat()),
-            ExtrinsicCalibrationMetadataListRequest()])
-        self._control_blocking_request_ids.add(self._controller.send_custom_request(
-            component_label=mixer_label,
-            request_series=request_series))
+    def _on_ui_image_update_pressed(self, _event: wx.CommandEvent) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_ui_image_update_pressed called.")
+        self._calibrate_status_textbox.SetValue(str())
+        selected_mixer_label: str = self._mixer_selector.selector.GetStringSelection()
+        image_index: int = self._image_table.get_selected_row_index()
+        image_identifier: str = self._image_metadata_list[image_index].identifier
+        # noinspection PyTypeChecker
+        image_state: ExtrinsicCalibrator.ImageState = \
+            ExtrinsicCalibrator.ImageState[self._image_state_selector.selector.GetStringSelection()]
+        image_label: str = self._image_label_textbox.textbox.GetValue()
+        self._controller.calibrate_extrinsic_image_metadata_update(
+            mixer_label=selected_mixer_label,
+            image_identifier=image_identifier,
+            image_state=image_state,
+            image_label=image_label,
+            callback=self._on_response_image_update)
+        self._awaiting_user_task = True
+        self._update_ui_controls()
 
-    def _handle_response_intrinsic_calibration_result_get_active(
-        self,
-        response: IntrinsicCalibrationResultGetActiveResponse,
-        detector_label: str
-    ) -> None:
-        mixer_label: str = self._mixer_selector.selector.GetStringSelection()
-        request_series: MCTRequestSeries = MCTRequestSeries(series=[
-            MixerIntrinsicUpdateRequest(
-                detector_label=detector_label,
-                intrinsic_parameters=response.intrinsic_calibration.calibrated_values)])
-        if len(self._control_blocking_request_ids) <= 0:  # This is the last intrinsic - we are ready to calculate
-            request_series.series.append(ExtrinsicCalibrationCalculateRequest())
-            # request_series.series.append(ExtrinsicCalibrationResultMetadataListRequest())
-        self._control_blocking_request_ids.add(self._controller.send_custom_request(
-            component_label=mixer_label,
-            request_series=request_series))
+    def _on_ui_metadata_reload_pressed(self, _event: wx.CommandEvent) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_ui_metadata_reload_pressed called.")
+        self._reload_metadata()
 
-    def _handle_response_extrinsic_calibration_calculate(
-        self,
-        response: ExtrinsicCalibrationCalculateResponse
-    ) -> None:
-        if not self._calibration_in_progress:
-            self.status_message_source.enqueue_status_message(
-                severity="warning",
-                message=f"Received CalibrateResponse while no calibration is in progress.")
-        self._calibrate_status_textbox.SetForegroundColour(colour=wx.Colour(red=0, green=0, blue=127, alpha=255))
-        self._calibrate_status_textbox.SetValue(f"Calibration {response.result_identifier} complete.")
-        self._result_display_textbox.SetValue(response.extrinsic_calibration.model_dump_json(indent=4))
-        self._calibration_in_progress = False
-
-    # noinspection PyUnusedLocal
-    def _handle_response_extrinsic_calibration_image_add(
-        self,
-        response: ExtrinsicCalibrationImageAddResponse
-    ) -> None:
-        if len(self._control_blocking_request_ids) <= 0:
-            self._current_capture_timestamp = None
-
-    def _handle_response_extrinsic_calibration_image_get(
-        self,
-        response: ExtrinsicCalibrationImageGetResponse
-    ) -> None:
-        self._extrinsic_image = ImageUtils.base64_to_image(response.image_base64)
-
-    def _handle_response_extrinsic_calibration_image_metadata_list(
-        self,
-        response: ExtrinsicCalibrationMetadataListResponse
-    ) -> None:
-        self._image_metadata_list = response.metadata_list
-        self._image_table.update_contents(row_contents=self._image_metadata_list)
-
-    def _handle_response_extrinsic_calibration_result_get(
-        self,
-        response: ExtrinsicCalibrationResultGetResponse
-    ) -> None:
-        self._result_display_textbox.SetValue(str(response.extrinsic_calibration.model_dump_json(indent=4)))
-
-    def _handle_response_extrinsic_calibration_result_metadata_list(
-        self,
-        response  # : ExtrinsicCalibrationResultMetadataListResponse
-    ) -> None:
-        self._result_metadata_list = response.metadata_list
-        self._result_table.update_contents(row_contents=self._result_metadata_list)
-
-    def _on_mixer_reload(self, _event: wx.CommandEvent) -> None:
+    def _on_ui_mixer_selected(self, _event: wx.CommandEvent) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_ui_mixer_selected called.")
         self._image_metadata_list = list()
         self._result_metadata_list = list()
         self._calibrate_status_textbox.SetValue(str())
         self._result_display_textbox.SetValue(str())
-        mixer_label: str = self._mixer_selector.selector.GetStringSelection()
-        request_series: MCTRequestSeries = MCTRequestSeries(series=[
-            ExtrinsicCalibrationMetadataListRequest()])
-            # ExtrinsicCalibrationResultMetadataListRequest()
-        self._control_blocking_request_ids.add(self._controller.send_custom_request(
-            component_label=mixer_label,
-            request_series=request_series))
-        self._update_ui_controls()
+        self._reload_metadata()
 
-    def _on_preview_toggled(self, _event: wx.CommandEvent) -> None:
-        if self._is_updating:
-            return
-        self._image_table.set_selected_row_index(None)
-        self._update_ui_controls()
+    def _on_ui_preview_toggled(self, _event: wx.CommandEvent):
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_ui_preview_toggled called.")
+        preview_on: bool = self._preview_toggle_button.GetValue()
+        if preview_on:
+            self._result_table.set_selected_row_index(None)
+            self._controller.set_detector_includes_images(True)
+            self._preview_panel.set_draw_image(True)
+        else:
+            self._controller.set_detector_includes_images(False)
+            self._preview_panel.set_draw_image(False)
 
-    def _on_capture_pressed(self, _event: wx.CommandEvent) -> None:
-        self._current_capture_timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
-        detector_labels: list[str] = self._controller.get_remote_labels_detectors()
-        for detector_label in detector_labels:
-            request_series: MCTRequestSeries = MCTRequestSeries(series=[
-                CameraImageGetRequest(format=ImageFormat.FORMAT_PNG)])
-            self._control_blocking_request_ids.add(self._controller.send_custom_request(
-                component_label=detector_label,
-                request_series=request_series))
-        self._update_ui_controls()
-
-    def _on_calibrate_pressed(self, _event: wx.CommandEvent) -> None:
-        self._calibrate_status_textbox.SetForegroundColour(colour=wx.Colour(red=0, green=0, blue=0, alpha=255))
-        self._calibrate_status_textbox.SetValue("Calibrating...")
-        self._result_display_textbox.SetValue(str())
-        detector_labels: list[str] = self._controller.get_remote_labels_detectors()
-        for detector_label in detector_labels:
-            request_series: MCTRequestSeries = MCTRequestSeries(series=[IntrinsicCalibrationResultGetActiveRequest()])
-            self._control_blocking_request_ids.add(self._controller.send_custom_request(
-                component_label=detector_label,
-                request_series=request_series))
-        self._calibration_in_progress = True
-        self._update_ui_controls()
-
-    def _on_image_metadata_selected(self, _event: wx.grid.GridEvent) -> None:
-        if self._is_updating:
-            return
-        self._preview_toggle_button.SetValue(False)
-        image_index: int = self._image_table.get_selected_row_index()
-        image_identifier: str | None = self._image_metadata_list[image_index].identifier
-        if image_identifier is not None:
-            request_series: MCTRequestSeries = MCTRequestSeries(series=[
-                ExtrinsicCalibrationImageGetRequest(image_identifier=image_identifier)])
-            mixer_label: str = self._mixer_selector.selector.GetStringSelection()
-            self._control_blocking_request_ids.add(self._controller.send_custom_request(
-                component_label=mixer_label,
-                request_series=request_series))
-        self._update_ui_controls()
-
-    def _on_image_update_pressed(self, _event: wx.CommandEvent) -> None:
-        self._calibrate_status_textbox.SetValue(str())
-        mixer_label: str = self._mixer_selector.selector.GetStringSelection()
-        image_index: int = self._image_table.get_selected_row_index()
-        image_identifier: str = self._image_metadata_list[image_index].identifier
-        image_state: IntrinsicCalibrator.ImageState = \
-            ExtrinsicCalibrator.ImageState[self._image_state_selector.selector.GetStringSelection()]
-        image_label: str = self._image_label_textbox.textbox.GetValue()
-        request_series: MCTRequestSeries = MCTRequestSeries(series=[
-            ExtrinsicCalibrationImageMetadataUpdateRequest(
-                image_identifier=image_identifier,
-                image_state=image_state,
-                image_label=image_label),
-            ExtrinsicCalibrationDeleteStagedRequest(),
-            ExtrinsicCalibrationMetadataListRequest()])
-        self._control_blocking_request_ids.add(self._controller.send_custom_request(
-            component_label=mixer_label,
-            request_series=request_series))
-        self._update_ui_controls()
-
-    def _on_result_metadata_selected(self, _event: wx.grid.GridEvent) -> None:
-        if self._is_updating:
-            return
-        self._preview_toggle_button.SetValue(False)
+    def _on_ui_result_metadata_selected(self, _event: wx.grid.GridEvent) -> None:
+        if self._awaiting_user_task:
+            return  # Not initiated by user
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_ui_result_metadata_selected called.")
         self._result_display_textbox.SetValue(str())
         result_index: int = self._result_table.get_selected_row_index()
         result_identifier: str | None = self._result_metadata_list[result_index].identifier
         if result_identifier is not None:
-            request_series: MCTRequestSeries = MCTRequestSeries(series=[
-                ExtrinsicCalibrationResultGetRequest(result_identifier=result_identifier)])
-            mixer_label: str = self._mixer_selector.selector.GetStringSelection()
-            self._control_blocking_request_ids.add(self._controller.send_custom_request(
-                component_label=mixer_label,
-                request_series=request_series))
+            selected_mixer_label: str = self._mixer_selector.selector.GetStringSelection()
+            self._controller.calibrate_extrinsic_result_get(
+                mixer_label=selected_mixer_label,
+                result_identifier=result_identifier,
+                callback=self._on_response_result_get)
+            self._awaiting_user_task = True
         self._update_ui_controls()
 
-    def _on_result_update_pressed(self, _event: wx.CommandEvent) -> None:
+    def _on_ui_result_update_pressed(self, _event: wx.CommandEvent) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_ui_result_update_pressed called.")
         self._result_display_textbox.SetValue(str())
-        mixer_label: str = self._mixer_selector.selector.GetStringSelection()
+        selected_mixer_label: str = self._mixer_selector.selector.GetStringSelection()
         result_index: int = self._result_table.get_selected_row_index()
         result_identifier: str = self._result_metadata_list[result_index].identifier
+        # noinspection PyTypeChecker
         result_state: ExtrinsicCalibrator.ResultState = \
             ExtrinsicCalibrator.ResultState[self._result_state_selector.selector.GetStringSelection()]
         result_label: str = self._result_label_textbox.textbox.GetValue()
-        request_series: MCTRequestSeries = MCTRequestSeries(series=[
-            ExtrinsicCalibrationResultMetadataUpdateRequest(
-                result_identifier=result_identifier,
-                result_state=result_state,
-                result_label=result_label),
-            ExtrinsicCalibrationDeleteStagedRequest()])
-            # ExtrinsicCalibrationResultMetadataListRequest()
-        self._control_blocking_request_ids.add(self._controller.send_custom_request(
-            component_label=mixer_label,
-            request_series=request_series))
+        self._controller.calibrate_extrinsic_result_metadata_update(
+            mixer_label=selected_mixer_label,
+            result_identifier=result_identifier,
+            result_state=result_state,
+            result_label=result_label,
+            callback=self._on_response_result_update)
+        self._awaiting_user_task = True
         self._update_ui_controls()
+
+    def _on_response_calibrate(
+        self,
+        component_label: str,
+        result_identifier: str,
+        extrinsic_calibration: ExtrinsicCalibration
+    ) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_response_calibrate called in response to {component_label}.")
+        self._calibrate_status_textbox.SetForegroundColour(colour=wx.Colour(red=0, green=0, blue=127, alpha=255))
+        self._calibrate_status_textbox.SetValue(
+            f"Calibration {result_identifier} from {component_label} complete.")
+        self._result_display_textbox.SetValue(extrinsic_calibration.model_dump_json(indent=4))
+        self._force_last_result_selected = True
+        self._reload_metadata()
+
+    def _on_response_delete_staged(
+        self,
+        component_label: str
+    ) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_response_delete_staged called in response to {component_label}.")
+        self._reload_metadata()
+
+    # noinspection PyUnusedLocal
+    def _on_response_image_add(
+        self,
+        component_label: str,
+        image_identifiers: list[str]
+    ) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_response_image_add called in response to {component_label}.")
+        self._reload_metadata()
+
+    def _on_response_image_get(
+        self,
+        component_label: str,
+        image_base64: str
+    ) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_response_image_get called in response to {component_label}.")
+        self._preview_toggle_button.SetValue(False)
+        self._preview_panel.set_draw_image(True)
+        self._preview_panel.update_image(images_base64=[image_base64])
+
+    def _on_response_image_update(
+        self,
+        component_label: str
+    ) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_response_image_update called in response to {component_label}.")
+        self._reload_metadata()
+
+    def _on_response_metadata_list(
+        self,
+        component_label: str,
+        image_metadata_list: list[ExtrinsicCalibrator.ImageMetadata],
+        result_metadata_list: list[ExtrinsicCalibrator.ResultMetadata]
+    ) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_response_metadata_list called in response to {component_label}.")
+        self._image_metadata_list = image_metadata_list
+        self._image_table.update_contents(row_contents=self._image_metadata_list)
+        self._result_metadata_list = result_metadata_list
+        self._result_table.update_contents(row_contents=self._result_metadata_list)
+        if self._force_last_result_selected:
+            self._result_table.set_selected_row_index(len(self._result_metadata_list) - 1)
+            self._force_last_result_selected = False
+
+    def _on_response_result_get(
+        self,
+        component_label: str,
+        extrinsic_calibration: ExtrinsicCalibration
+    ) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_response_result_get called in response to {component_label}.")
+        self._result_display_textbox.SetValue(str(extrinsic_calibration.model_dump_json(indent=4)))
+
+    def _on_response_result_update(
+        self,
+        component_label: str
+    ) -> None:
+        self._status_message_source.enqueue_status_message(
+            severity=SeverityLabel.DEBUG,
+            message=f"extrinsics_panel._on_response_result_update called in response to {component_label}.")
+        self._reload_metadata()
+
+    def _reload_metadata(self) -> None:
+        self._metadata_needs_update = True
+
+    def update_loop(self) -> None:
+        super().update_loop()
+        if self._awaiting_user_task:
+            if not self._controller.is_user_task_running():
+                self._awaiting_user_task = False
+                self._update_ui_controls()
+        if not self._awaiting_user_task and self._metadata_needs_update:
+            self._image_metadata_list = list()
+            self._result_metadata_list = list()
+            self._calibrate_status_textbox.SetValue(str())
+            self._result_display_textbox.SetValue(str())
+            selected_mixer_label: str = self._mixer_selector.selector.GetStringSelection()
+            self._controller.calibrate_extrinsic_metadata_list(
+                mixer_label=selected_mixer_label,
+                callback=self._on_response_metadata_list)
+            self._metadata_needs_update = False
+            self._update_ui_controls()
+            self._awaiting_user_task = True
+        selected_mixer_label: str = self._mixer_selector.selector.GetStringSelection()
+        if (
+            (selected_mixer_label is not None) and
+            (len(selected_mixer_label) > 0)
+        ):
+            if self._preview_toggle_button.GetValue():
+                detector_labels: list[str] = self._controller.get_remote_labels_detectors()
+                images_base64: list[str] = [
+                    self._controller.get_live_detector_data(detector_label=detector_label).frame.image_base64
+                    for detector_label in detector_labels]
+                self._preview_panel.update_image(images_base64=images_base64)
+            elif self._image_table.get_selected_row_index() is None:
+                self._preview_panel.update_image()
+        else:
+            self._preview_panel.update_image()
 
     def _update_ui_controls(self) -> None:
         self._mixer_selector.Enable(False)
-        self._reload_button.Enable(False)
         self._preview_toggle_button.Enable(False)
         self._capture_button.Enable(False)
         self._calibrate_button.Enable(False)
+        self._reload_metadata_button.Enable(False)
         self._image_table.Enable(False)
         self._image_label_textbox.Enable(False)
         self._image_label_textbox.textbox.SetValue(str())
@@ -586,14 +564,15 @@ class ExtrinsicsPanel(BasePanel):
         self._result_state_selector.Enable(False)
         self._result_state_selector.selector.SetStringSelection(str())
         self._result_update_button.Enable(False)
-        if len(self._control_blocking_request_ids) > 0:
+        self._delete_staged_button.Enable(False)
+        if self._awaiting_user_task:
             return  # We're waiting for something
         self._mixer_selector.Enable(True)
         mixer_label: str = self._mixer_selector.selector.GetStringSelection()
         if len(mixer_label) <= 0:
             self._preview_toggle_button.SetValue(False)
             return
-        self._reload_button.Enable(True)
+        self._reload_metadata_button.Enable(True)
         self._preview_toggle_button.Enable(True)
         self._capture_button.Enable(True)
         # == NO RETURN GUARDS AFTER THIS POINT ==
@@ -602,12 +581,12 @@ class ExtrinsicsPanel(BasePanel):
             image_index: int | None = self._image_table.get_selected_row_index()
             if image_index is not None:
                 if image_index >= len(self._image_metadata_list):
-                    self.status_message_source.enqueue_status_message(
-                        severity="warning",
+                    self._status_message_source.enqueue_status_message(
+                        severity=SeverityLabel.WARNING,
                         message=f"Selected image index {image_index} is out of bounds. Setting to None.")
                     self._image_table.set_selected_row_index(None)
                 else:
-                    image_metadata: IntrinsicCalibrator.ImageMetadata = self._image_metadata_list[image_index]
+                    image_metadata: ExtrinsicCalibrator.ImageMetadata = self._image_metadata_list[image_index]
                     self._image_label_textbox.Enable(True)
                     self._image_label_textbox.textbox.SetValue(image_metadata.label)
                     self._image_state_selector.Enable(True)
@@ -615,68 +594,30 @@ class ExtrinsicsPanel(BasePanel):
                     self._image_update_button.Enable(True)
             calibration_image_count: int = 0
             for image_metadata in self._image_metadata_list:
-                if image_metadata.state == IntrinsicCalibrator.ImageState.SELECT:
+                if image_metadata.state == ExtrinsicCalibrator.ImageState.SELECT:
                     calibration_image_count += 1
             if calibration_image_count > 0:
                 self._calibrate_button.Enable(True)
                 self._calibrate_status_textbox.Enable(True)
+            self._delete_staged_button.Enable(True)
         if len(self._result_metadata_list) > 0:
             self._result_table.Enable(True)
             result_index: int | None = self._result_table.get_selected_row_index()
             if result_index is not None:
                 if result_index >= len(self._result_metadata_list):
-                    self.status_message_source.enqueue_status_message(
-                        severity="warning",
+                    self._status_message_source.enqueue_status_message(
+                        severity=SeverityLabel.WARNING,
                         message=f"Selected result index {result_index} is out of bounds. Setting to None.")
                     self._result_table.set_selected_row_index(None)
                 else:
-                    result_metadata: IntrinsicCalibrator.ResultMetadata = self._result_metadata_list[result_index]
+                    result_metadata: ExtrinsicCalibrator.ResultMetadata = self._result_metadata_list[result_index]
                     self._result_display_textbox.Enable(True)
                     self._result_label_textbox.Enable(True)
                     self._result_label_textbox.textbox.SetValue(result_metadata.label)
                     self._result_state_selector.Enable(True)
                     self._result_state_selector.selector.SetStringSelection(result_metadata.state.name)
                     self._result_update_button.Enable(True)
+            self._delete_staged_button.Enable(True)
         self.Layout()
         self.Refresh()
         self.Update()
-
-    def _update_ui_image(self):
-        display_image: numpy.ndarray = ImageUtils.black_image(resolution_px=self._image_panel.GetSize())
-        available_size_px: int = (display_image.shape[1], display_image.shape[0])
-        if self._preview_toggle_button.GetValue():
-            detector_labels: list[str] = self._controller.get_remote_labels_detectors()
-            image_dimensions: tuple[int, int]
-            image_positions: list[tuple[int, int]]
-            image_dimensions, image_positions = ImageUtils.partition_rect(
-                available_size_px=available_size_px,
-                partition_count=len(detector_labels))
-            for detector_index, detector_label in enumerate(detector_labels):
-                if detector_label in self._preview_images_by_detector_label:
-                    detector_image: numpy.ndarray = self._preview_images_by_detector_label[detector_label]
-                    detector_image = ImageUtils.image_resize_to_fit(
-                        opencv_image=detector_image,
-                        available_size=image_dimensions)
-                    offset_y_px: int = image_positions[detector_index][1] + (image_dimensions[1] - detector_image.shape[0]) // 2
-                    offset_x_px: int = image_positions[detector_index][0] + (image_dimensions[0] - detector_image.shape[1]) // 2
-                    display_image[
-                        offset_y_px:offset_y_px + detector_image.shape[0],
-                        offset_x_px:offset_x_px + detector_image.shape[1]
-                    ] = detector_image
-        elif self._extrinsic_image is not None:
-            extrinsic_image: numpy.ndarray = ImageUtils.image_resize_to_fit(
-                opencv_image=self._extrinsic_image,
-                available_size=available_size_px)
-            offset_y_px: int = (display_image.shape[0] - extrinsic_image.shape[0]) // 2
-            offset_x_px: int = (display_image.shape[1] - extrinsic_image.shape[1]) // 2
-            display_image[
-                offset_y_px:offset_y_px + extrinsic_image.shape[0],
-                offset_x_px:offset_x_px + extrinsic_image.shape[1],
-            ] = extrinsic_image
-
-        image_buffer: bytes = ImageUtils.image_to_bytes(image_data=display_image, image_format=".jpg")
-        image_buffer_io: BytesIO = BytesIO(image_buffer)
-        wx_image: wx.Image = wx.Image(image_buffer_io)
-        wx_bitmap: wx.Bitmap = wx_image.ConvertToBitmap()
-        self._image_panel.set_bitmap(wx_bitmap)
-        self._image_panel.paint()

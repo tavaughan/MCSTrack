@@ -24,7 +24,7 @@ POSE_SOLVER_LABEL: Final[str] = "Pose Solver"
 _STATUS_BAR_FIELD_INDEX_TEXT: Final[int] = 0
 _STATUS_BAR_FIELD_INDEX_BUTTON: Final[int] = 1
 _STATUS_BAR_FIELD_COUNT: Final[int] = 2
-_STATUS_BAR_HEIGHT_PX: Final[int] = 30
+_STATUS_BAR_HEIGHT_PX: Final[int] = 40
 _STATUS_LOG_HEIGHT_PX: Final[int] = 120
 _STATUS_MESSAGE_TABLE_SUBSCRIBER_LABEL: Final[str] = "status_message_table"
 
@@ -110,15 +110,15 @@ class ControllerFrame(wx.Frame):
             select=False)
         self._panels.add(self._intrinsics_panel)
 
-        # self._extrinsics_panel = ExtrinsicsPanel(
-        #     parent=self._notebook,
-        #     controller=self._controller)
-        # self._notebook.AddPage(
-        #     page=self._extrinsics_panel,
-        #     text=EXTRINSIC_CALIBRATOR_LABEL,
-        #     select=False)
-        # self._panels.add(self._extrinsics_panel)
-        #
+        self._extrinsics_panel = ExtrinsicsPanel(
+            parent=self._notebook,
+            controller=self._controller)
+        self._notebook.AddPage(
+            page=self._extrinsics_panel,
+            text=EXTRINSIC_CALIBRATOR_LABEL,
+            select=False)
+        self._panels.add(self._extrinsics_panel)
+
         # self._board_builder_panel = BoardBuilderPanel(
         #     parent=self._notebook,
         #     controller=self._controller)

@@ -1,7 +1,6 @@
 from .base_panel import \
     BasePanel
 from .parameters import \
-    ParameterCheckbox, \
     ParameterSelector, \
     ParameterText
 from .specialized import \
@@ -31,7 +30,7 @@ class IntrinsicsPanel(BasePanel):
 
     _detector_selector: ParameterSelector
     _detector_resolution_selector: ParameterSelector
-    _preview_image_checkbox: ParameterCheckbox
+    _preview_toggle_button: wx.ToggleButton
     _capture_button: wx.Button
     _calibrate_button: wx.Button
     _calibrate_status_textbox: wx.TextCtrl
@@ -103,10 +102,13 @@ class IntrinsicsPanel(BasePanel):
             label="Resolution",
             selectable_values=list())
 
-        self._preview_image_checkbox = self.add_control_checkbox(
+        self._preview_toggle_button = wx.ToggleButton(
             parent=control_panel,
-            sizer=control_sizer,
             label="Preview Image")
+        control_sizer.Add(
+            window=self._preview_toggle_button,
+            flags=wx.SizerFlags(0).Expand())
+        control_sizer.AddSpacer(size=BasePanel.DEFAULT_SPACING_PX_VERTICAL)
 
         self._capture_button: wx.Button = self.add_control_button(
             parent=control_panel,
@@ -231,8 +233,8 @@ class IntrinsicsPanel(BasePanel):
         self._detector_resolution_selector.selector.Bind(
             event=wx.EVT_CHOICE,
             handler=self._on_ui_detector_resolution_selected)
-        self._preview_image_checkbox.checkbox.Bind(
-            event=wx.EVT_CHECKBOX,
+        self._preview_toggle_button.Bind(
+            event=wx.EVT_TOGGLEBUTTON,
             handler=self._on_ui_preview_toggled)
         self._capture_button.Bind(
             event=wx.EVT_BUTTON,
@@ -269,6 +271,13 @@ class IntrinsicsPanel(BasePanel):
         else:
             self._detector_selector.selector.SetStringSelection(str())
         self._update_ui_controls()
+
+    def on_ui_page_deselect(self) -> None:
+        super().on_ui_page_deselect()
+        # Some cleanup in case settings were changed.
+        self._controller.set_detector_includes_images(False)
+        self._controller.set_detector_includes_annotations_detected(True)
+        self._controller.set_detector_includes_annotations_rejected(False)
 
     def _on_ui_calibrate_pressed(self, _event: wx.CommandEvent) -> None:
         self._status_message_source.enqueue_status_message(
@@ -387,7 +396,7 @@ class IntrinsicsPanel(BasePanel):
         self._status_message_source.enqueue_status_message(
             severity=SeverityLabel.DEBUG,
             message=f"intrinsics_panel._on_ui_preview_toggled called.")
-        preview_on: bool = self._preview_image_checkbox.checkbox.GetValue()
+        preview_on: bool = self._preview_toggle_button.GetValue()
         if preview_on:
             self._result_table.set_selected_row_index(None)
             self._controller.set_detector_includes_images(True)
@@ -480,7 +489,7 @@ class IntrinsicsPanel(BasePanel):
         self._status_message_source.enqueue_status_message(
             severity=SeverityLabel.DEBUG,
             message=f"intrinsics_panel._on_response_image_get called in response to {component_label}.")
-        self._preview_image_checkbox.checkbox.SetValue(False)
+        self._preview_toggle_button.SetValue(False)
         self._preview_panel.set_draw_image(True)
         self._preview_panel.update_image(image_base64=image_base64)
 
@@ -570,7 +579,7 @@ class IntrinsicsPanel(BasePanel):
             (selected_detector_label is not None) and
             (len(selected_detector_label) > 0)
         ):
-            if self._preview_image_checkbox.checkbox.GetValue():
+            if self._preview_toggle_button.GetValue():
                 detector_live_data: MCTController.DetectorLiveData = \
                     self._controller.get_live_detector_data(detector_label=selected_detector_label)
                 self._preview_panel.update_image(
@@ -584,7 +593,7 @@ class IntrinsicsPanel(BasePanel):
     def _update_ui_controls(self) -> None:
         self._detector_selector.Enable(False)
         self._detector_resolution_selector.Enable(False)
-        self._preview_image_checkbox.Enable(False)
+        self._preview_toggle_button.Enable(False)
         self._capture_button.Enable(False)
         self._calibrate_button.Enable(False)
         self._calibrate_status_textbox.Enable(False)
@@ -612,7 +621,7 @@ class IntrinsicsPanel(BasePanel):
         resolution: str = self._detector_resolution_selector.selector.GetStringSelection()
         if len(resolution) <= 0:
             return
-        self._preview_image_checkbox.Enable(True)
+        self._preview_toggle_button.Enable(True)
         self._capture_button.Enable(True)
         self._reload_metadata_button.Enable(True)
         # == NO RETURN GUARDS AFTER THIS POINT ==

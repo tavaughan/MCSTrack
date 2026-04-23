@@ -210,13 +210,12 @@ class DetectorPanel(BasePanel):
         self._detector_selector.set_options(option_list=available_detector_labels)
         self._update_ui_controls()
 
-    def on_ui_page_deselect(self):
+    def on_ui_page_deselect(self) -> None:
         super().on_ui_page_deselect()
-        if self._controller.get_controller_state() == MCTController.State.RUNNING and \
-           self._controller.get_detector_includes_images():
-            # Save processing/bandwidth
-            self._controller.set_detector_includes_images(False)
-            self._controller.set_detector_includes_annotations_rejected(False)
+        # Some cleanup in case settings were changed.
+        self._controller.set_detector_includes_images(False)
+        self._controller.set_detector_includes_annotations_detected(True)
+        self._controller.set_detector_includes_annotations_rejected(False)
 
     def on_ui_detector_selected(self, _event: wx.CommandEvent):
         selected_detector_label: str = self._detector_selector.selector.GetStringSelection()
