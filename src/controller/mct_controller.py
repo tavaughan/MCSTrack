@@ -1007,6 +1007,7 @@ class MCTController:
             component_labels=[detector_label],
             callback=callback,
             request_args={"image_resolution": image_resolution})
+        # TODO: If a new "Active" Calibration is set, then Mixer(s) need to be notified
         return True
 
     def calibrate_intrinsic_delete_staged(
@@ -1287,6 +1288,7 @@ class MCTController:
                 "result_identifier": result_identifier,
                 "result_state": str(result_state),
                 "result_label": result_label})
+        # TODO: If a new "Active" Calibration is set, then Mixer(s) need to be notified
         return True
 
     def calibrate_extrinsic_calculate(
